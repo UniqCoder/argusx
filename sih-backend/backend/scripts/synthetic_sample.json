@@ -1,0 +1,1390 @@
+{
+  "wallets": [
+    {
+      "id": "bdd640fb-0667-4ad1-9c80-317fa3b1799d",
+      "address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7Divf2",
+      "chain": "BTC",
+      "risk_score": null,
+      "risk_tier": "critical",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-12T09:37:21.562625+00:00",
+      "last_seen": "2026-08-24T09:37:21.562625+00:00"
+    },
+    {
+      "id": "d58842de-a2bc-472f-b412-b29347294739",
+      "address": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+      "chain": "ETH",
+      "risk_score": null,
+      "risk_tier": "critical",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-06T09:37:21.562625+00:00",
+      "last_seen": "2026-08-25T09:37:21.562625+00:00"
+    },
+    {
+      "id": "a491f0b2-ea1f-4a65-a27a-984d654821d0",
+      "address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+      "chain": "TRON",
+      "risk_score": null,
+      "risk_tier": "high",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-06-30T09:37:21.562625+00:00",
+      "last_seen": "2026-08-25T09:37:21.562625+00:00"
+    },
+    {
+      "id": "f143262f-dc5c-4eed-8da0-365bf89897b9",
+      "address": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+      "chain": "BTC",
+      "risk_score": null,
+      "risk_tier": "high",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-29T09:37:21.562625+00:00",
+      "last_seen": "2026-08-26T09:37:21.562625+00:00"
+    },
+    {
+      "id": "2720797d-32eb-4689-9be5-78c781f631d4",
+      "address": "0x89205A3A3b2A69De6Dbf7f01ED13B2108B2c43e7",
+      "chain": "ETH",
+      "risk_score": null,
+      "risk_tier": "high",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-06T09:37:21.562625+00:00",
+      "last_seen": "2026-08-25T09:37:21.562625+00:00"
+    },
+    {
+      "id": "8715a103-43da-4043-aa45-c2ab8cbfedb0",
+      "address": "TUEbqomDnLSjiQVzaV8GF5N2ecFeF15nh4",
+      "chain": "TRON",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-03T09:37:21.562625+00:00",
+      "last_seen": "2026-07-03T09:37:21.562625+00:00"
+    },
+    {
+      "id": "21df306f-8a0b-4c33-b6d8-393a7c441fe7",
+      "address": "TyddXGsXtTD77jUPUTWxo4kii74SoNtx7G",
+      "chain": "TRON",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-08-19T09:37:21.562625+00:00",
+      "last_seen": "2026-08-19T09:37:21.562625+00:00"
+    },
+    {
+      "id": "ceda8bbb-7171-4434-934c-6c92ec5b227c",
+      "address": "T74ibv16qwGBTYXExSz4BR1RHssWKUmosc",
+      "chain": "TRON",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-08-14T09:37:21.562625+00:00",
+      "last_seen": "2026-08-14T09:37:21.562625+00:00"
+    },
+    {
+      "id": "958ca9ba-0cd6-40c2-8ea2-622b504867ba",
+      "address": "0x5125227c3712da86a78c49ea20e32684b27b95e9",
+      "chain": "ETH",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-16T09:37:21.562625+00:00",
+      "last_seen": "2026-07-16T09:37:21.562625+00:00"
+    },
+    {
+      "id": "1b66b5a9-e3c4-4657-9d8c-bbac43b409ef",
+      "address": "TcAJKfEnNEkhwHZYHzw46hUvJ31Nr9hHBp",
+      "chain": "TRON",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-08-20T09:37:21.562625+00:00",
+      "last_seen": "2026-08-20T09:37:21.562625+00:00"
+    },
+    {
+      "id": "8d7248e2-951f-48d0-9e84-f058d5a804eb",
+      "address": "1U93LQzsx3zPEkGj7PrcyxTgpAGxBttCyT",
+      "chain": "BTC",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-08-06T09:37:21.562625+00:00",
+      "last_seen": "2026-08-06T09:37:21.562625+00:00"
+    },
+    {
+      "id": "b386f7a4-c991-403f-a8c1-3091444d610b",
+      "address": "1Rx3wXFDuWPLusxFF2jDSNJx5rJPiZSkvb",
+      "chain": "BTC",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-08-11T09:37:21.562625+00:00",
+      "last_seen": "2026-08-11T09:37:21.562625+00:00"
+    },
+    {
+      "id": "587ef344-6f3f-420c-98b8-e4cc1bc044fc",
+      "address": "TsMUfZ8RzdDH3nU1atbkoppjDQU5jNgMjw",
+      "chain": "TRON",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-16T09:37:21.562625+00:00",
+      "last_seen": "2026-07-16T09:37:21.562625+00:00"
+    },
+    {
+      "id": "aa38d0a1-6ba2-4efe-b11c-6eb62095eef6",
+      "address": "0x59c0996daeee6f529a279764017f2ed6cfc7403d",
+      "chain": "ETH",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-14T09:37:21.562625+00:00",
+      "last_seen": "2026-07-14T09:37:21.562625+00:00"
+    },
+    {
+      "id": "cd29a36f-2222-42e1-b4da-aebf1f115b76",
+      "address": "0xaede5fe878f78e2978aa2447c462ddaed16dc0cf",
+      "chain": "ETH",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-08-03T09:37:21.562625+00:00",
+      "last_seen": "2026-08-03T09:37:21.562625+00:00"
+    },
+    {
+      "id": "7cfc9b79-3875-494c-a5d6-f6e69a6ec2f5",
+      "address": "1JUY2RNjktSoBvW9gb2Sedj26iU9xWC4HR",
+      "chain": "BTC",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-08-06T09:37:21.562625+00:00",
+      "last_seen": "2026-08-06T09:37:21.562625+00:00"
+    },
+    {
+      "id": "78660765-14f7-4e8d-95bc-b8d04094dded",
+      "address": "1pb4PFi5ri3q2GDv2gAG9Xj8dEWmHrQBff",
+      "chain": "BTC",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-08-21T09:37:21.562625+00:00",
+      "last_seen": "2026-08-21T09:37:21.562625+00:00"
+    },
+    {
+      "id": "b70b3420-f104-4785-a58b-252360141de9",
+      "address": "15emvhG7mrLwkft8sds3PbUjQ5ZiN1wTuY",
+      "chain": "BTC",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-18T09:37:21.562625+00:00",
+      "last_seen": "2026-07-18T09:37:21.562625+00:00"
+    },
+    {
+      "id": "45241ea6-a684-4099-b729-4951859131d2",
+      "address": "TtbrXWUuoeJMwGv6JyVGqWdgjRN2YwMCYE",
+      "chain": "TRON",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-02T09:37:21.562625+00:00",
+      "last_seen": "2026-07-02T09:37:21.562625+00:00"
+    },
+    {
+      "id": "680bac63-b856-4035-bdc9-829015eabb27",
+      "address": "0x7ffe0297c79bfbdabe898736a3566f893697b590",
+      "chain": "ETH",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-08-24T09:37:21.562625+00:00",
+      "last_seen": "2026-08-24T09:37:21.562625+00:00"
+    },
+    {
+      "id": "df6a8f93-1a43-4f0a-bdaa-39f0c0b6fce2",
+      "address": "1dKXXVNC4HxX8u5SY5dhk4AAtdL6G8cqTf",
+      "chain": "BTC",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-25T09:37:21.562625+00:00",
+      "last_seen": "2026-07-25T09:37:21.562625+00:00"
+    },
+    {
+      "id": "4e2d6645-6dc7-4ac7-bd72-b05096a9954f",
+      "address": "Tg4gp7qEhEHj6BGCc5B1TVmfXK3FKnKmxW",
+      "chain": "TRON",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-08T09:37:21.562625+00:00",
+      "last_seen": "2026-07-08T09:37:21.562625+00:00"
+    },
+    {
+      "id": "d39e198b-4400-4d5a-a88d-a71926242b40",
+      "address": "154BsLfpudKV8WmLmSJZbYV6f3yUpMfH26",
+      "chain": "BTC",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-15T09:37:21.562625+00:00",
+      "last_seen": "2026-07-15T09:37:21.562625+00:00"
+    },
+    {
+      "id": "7135f221-a6c9-437f-84da-d06a7872bdeb",
+      "address": "0x5df2fbdaa35adf9c1e2a8a3c0ed16bfe16849ef3",
+      "chain": "ETH",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-13T09:37:21.562625+00:00",
+      "last_seen": "2026-07-13T09:37:21.562625+00:00"
+    },
+    {
+      "id": "d7665cda-fe04-4059-b985-fb6217dc8eff",
+      "address": "1W8ivAYnKZnJTvXXGWcARDfZpy9x5JrswT",
+      "chain": "BTC",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-08-27T09:37:21.562625+00:00",
+      "last_seen": "2026-08-27T09:37:21.562625+00:00"
+    },
+    {
+      "id": "dd81b7f5-7d59-41c6-a8f1-e091ffb8102d",
+      "address": "1VbXPNcqbRWMxDmGdRFwrT3MpXntRRjsui",
+      "chain": "BTC",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-08-19T09:37:21.562625+00:00",
+      "last_seen": "2026-08-19T09:37:21.562625+00:00"
+    },
+    {
+      "id": "03edd1f8-74f9-4d17-a912-b4bf86a4bae4",
+      "address": "TATxiA5XsHNgmSi6wNwkwbRMhnyqYxb3g5",
+      "chain": "TRON",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-11T09:37:21.562625+00:00",
+      "last_seen": "2026-07-11T09:37:21.562625+00:00"
+    },
+    {
+      "id": "7194eae2-19ba-47ae-9f61-5a5cb4323070",
+      "address": "1mLz23Ms4KPQUAGaTdksCBC6gxRgkGYeAF",
+      "chain": "BTC",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-16T09:37:21.562625+00:00",
+      "last_seen": "2026-07-16T09:37:21.562625+00:00"
+    },
+    {
+      "id": "f1faf665-7115-43f3-92e8-9d1028711733",
+      "address": "0x9d8e96cf37cb990c801f97b7684319e1b429ad56",
+      "chain": "ETH",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-06-30T09:37:21.562625+00:00",
+      "last_seen": "2026-06-30T09:37:21.562625+00:00"
+    },
+    {
+      "id": "4b8e63d4-ce76-47ad-b7a6-7b947b5a611a",
+      "address": "TxNt8W5AqFxkokSwtcQ6sS1Hb8WQkpkHeR",
+      "chain": "TRON",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-28T09:37:21.562625+00:00",
+      "last_seen": "2026-07-28T09:37:21.562625+00:00"
+    },
+    {
+      "id": "a5cc8bf7-38ab-454c-9c2e-58deea4e3617",
+      "address": "1huWmLiT8933LY87Gyb9RWQjpmbTepoAyT",
+      "chain": "BTC",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-08-10T09:37:21.562625+00:00",
+      "last_seen": "2026-08-10T09:37:21.562625+00:00"
+    },
+    {
+      "id": "5cd8fe1a-dafe-48a9-bc71-e0bef3579560",
+      "address": "1kQbziP4SJD8wuW6jEihf24sNG9sdE5vqc",
+      "chain": "BTC",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-08-13T09:37:21.562625+00:00",
+      "last_seen": "2026-08-13T09:37:21.562625+00:00"
+    },
+    {
+      "id": "250a4578-fbe9-4499-9bc0-80fd46fb7bf3",
+      "address": "1bHtC8jx291PssGeM2CH49pTa8p5XVrQZe",
+      "chain": "BTC",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-19T09:37:21.562625+00:00",
+      "last_seen": "2026-07-19T09:37:21.562625+00:00"
+    },
+    {
+      "id": "a4b1f991-7542-4646-8d37-a539857dd3b3",
+      "address": "14XwSUk7YnV5z6MfA59JghecnMRfaKWZfU",
+      "chain": "BTC",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-17T09:37:21.562625+00:00",
+      "last_seen": "2026-07-17T09:37:21.562625+00:00"
+    },
+    {
+      "id": "66132e69-7418-4109-93d1-bf0f56c438e4",
+      "address": "0x3ada8b4f2222d3b41a3dbd199b364f73bb387d08",
+      "chain": "ETH",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-10T09:37:21.562625+00:00",
+      "last_seen": "2026-07-10T09:37:21.562625+00:00"
+    },
+    {
+      "id": "6699cd99-a847-4ce7-90fa-6b5724ac2130",
+      "address": "1Aph26paERTWNBQLoMrdf6y4ABqg4k6JVj",
+      "chain": "BTC",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-08-01T09:37:21.562625+00:00",
+      "last_seen": "2026-08-01T09:37:21.562625+00:00"
+    },
+    {
+      "id": "ad9fb00d-4882-473c-9c63-45ab6e0ed1e8",
+      "address": "TeYajL3FSf41ELEr9qHKM81YpUC9RbnFZc",
+      "chain": "TRON",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-11T09:37:21.562625+00:00",
+      "last_seen": "2026-07-11T09:37:21.562625+00:00"
+    },
+    {
+      "id": "6de59332-9364-43d0-9024-bdc6dcb33df3",
+      "address": "TSnhTK8S2MBtgWvmQ6Uw7GUeSa6SxLpNFN",
+      "chain": "TRON",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-08-20T09:37:21.562625+00:00",
+      "last_seen": "2026-08-20T09:37:21.562625+00:00"
+    },
+    {
+      "id": "3c7c1d85-25cf-4041-90a6-43fea53bc024",
+      "address": "1AHDCfAqqi5CrhYWqdqeVkydihgMxhMAV5",
+      "chain": "BTC",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-08T09:37:21.562625+00:00",
+      "last_seen": "2026-07-08T09:37:21.562625+00:00"
+    },
+    {
+      "id": "09a0a0f6-73b0-4091-b634-c1694f76e388",
+      "address": "1QvK5ixw6gfZRWecspz3VtdiDMfXZA4V7t",
+      "chain": "BTC",
+      "risk_score": null,
+      "risk_tier": "unknown",
+      "vasp_identified": null,
+      "cluster_id": null,
+      "first_seen": "2026-07-17T09:37:21.562625+00:00",
+      "last_seen": "2026-07-17T09:37:21.562625+00:00"
+    }
+  ],
+  "complaints": [
+    {
+      "id": "0822e8f3-6c03-4199-972a-846916419f82",
+      "ncrp_ref": "NCRP-2026-001001",
+      "source_platform": "ncrp",
+      "complainant_id": "e0789e2b-49cb-4641-8968-676295f4b403",
+      "narrative_text": "Victim fell for a phishing website mimicking a popular exchange login. Assets drained and transferred to 1A1zP1eP5QGefi2DMPTfTL5SLmv7Divf2.",
+      "fraud_typology": "investment_fraud",
+      "amount_lost": 115586.67,
+      "filed_at": "2026-08-12T17:37:21.562625+00:00",
+      "state": "Gujarat",
+      "district": "Ahmedabad",
+      "created_at": "2026-08-12T17:42:21.562625+00:00"
+    },
+    {
+      "id": "a65ed389-b74d-4fb1-b2e7-06298fadc1a6",
+      "ncrp_ref": "NCRP-2026-001002",
+      "source_platform": "ncrp",
+      "complainant_id": "a60efb66-b0f7-4fec-ad27-65106063c29b",
+      "narrative_text": "Victim received a message on Telegram offering high returns on crypto staking. Instructed to transfer funds to wallet 1A1zP1eP5QGefi2DMPTfTL5SLmv7Divf2.",
+      "fraud_typology": "investment_fraud",
+      "amount_lost": 204308.44,
+      "filed_at": "2026-07-21T01:37:21.562625+00:00",
+      "state": "Karnataka",
+      "district": "Mangaluru",
+      "created_at": "2026-07-21T01:42:21.562625+00:00"
+    },
+    {
+      "id": "47229389-571a-4876-ac30-7511b2b9437a",
+      "ncrp_ref": "NCRP-2026-001003",
+      "source_platform": "sahyog",
+      "complainant_id": "372d99ec-e2e7-4a67-ac5f-3972bf363644",
+      "narrative_text": "Victim received a message on Telegram offering high returns on crypto staking. Instructed to transfer funds to wallet 1A1zP1eP5QGefi2DMPTfTL5SLmv7Divf2.",
+      "fraud_typology": "investment_fraud",
+      "amount_lost": 200719.63,
+      "filed_at": "2026-08-06T06:37:21.562625+00:00",
+      "state": "Delhi",
+      "district": "North Delhi",
+      "created_at": "2026-08-06T06:42:21.562625+00:00"
+    },
+    {
+      "id": "580d7b71-d8f5-4413-9be6-128e18c26797",
+      "ncrp_ref": "NCRP-2026-001004",
+      "source_platform": "manual",
+      "complainant_id": "c3ba3ee6-42dd-4065-a67c-e2cce6d55479",
+      "narrative_text": "Victim was contacted on WhatsApp posing as institutional crypto brokers promising 300% weekly return. Deposited funds to 1A1zP1eP5QGefi2DMPTfTL5SLmv7Divf2.",
+      "fraud_typology": "investment_fraud",
+      "amount_lost": 235164.61,
+      "filed_at": "2026-08-24T10:37:21.562625+00:00",
+      "state": "Telangana",
+      "district": "Warangal",
+      "created_at": "2026-08-24T10:42:21.562625+00:00"
+    },
+    {
+      "id": "60e7a113-ec1b-4ca1-b91e-1d4c1ff49b78",
+      "ncrp_ref": "NCRP-2026-001005",
+      "source_platform": "manual",
+      "complainant_id": "c6082760-233b-48da-97c9-e19c37e9a7be",
+      "narrative_text": "Victim reported extortion call claiming compromising video. Forced to purchase USDT and send to suspect wallet 1A1zP1eP5QGefi2DMPTfTL5SLmv7Divf2.",
+      "fraud_typology": "investment_fraud",
+      "amount_lost": 436428.44,
+      "filed_at": "2026-07-17T14:37:21.562625+00:00",
+      "state": "Tamil Nadu",
+      "district": "Chennai",
+      "created_at": "2026-07-17T14:42:21.562625+00:00"
+    },
+    {
+      "id": "0bbb2599-11ce-4dd2-b45e-d1f03139d32c",
+      "ncrp_ref": "NCRP-2026-001006",
+      "source_platform": "sahyog",
+      "complainant_id": "a867fa2e-f03c-4ec4-8b41-7dbb452bb528",
+      "narrative_text": "Victim received a message on Telegram offering high returns on crypto staking. Instructed to transfer funds to wallet 1A1zP1eP5QGefi2DMPTfTL5SLmv7Divf2.",
+      "fraud_typology": "investment_fraud",
+      "amount_lost": 591147.84,
+      "filed_at": "2026-08-22T02:37:21.562625+00:00",
+      "state": "Uttar Pradesh",
+      "district": "Lucknow",
+      "created_at": "2026-08-22T02:42:21.562625+00:00"
+    },
+    {
+      "id": "aefcfad8-efc8-4849-b3aa-7efe4458a885",
+      "ncrp_ref": "NCRP-2026-001007",
+      "source_platform": "manual",
+      "complainant_id": "5a7750c7-dc14-494d-b5f9-71b9d3cadf38",
+      "narrative_text": "Victim fell for a phishing website mimicking a popular exchange login. Assets drained and transferred to 0x742d35Cc6634C0532925a3b844Bc454e4438f44e.",
+      "fraud_typology": "task_based_fraud",
+      "amount_lost": 99981.76,
+      "filed_at": "2026-07-18T04:37:21.562625+00:00",
+      "state": "Telangana",
+      "district": "Warangal",
+      "created_at": "2026-07-18T04:42:21.562625+00:00"
+    },
+    {
+      "id": "6123fdf7-7656-4f72-a9d4-beef3eabedcb",
+      "ncrp_ref": "NCRP-2026-001008",
+      "source_platform": "ncrp",
+      "complainant_id": "9a724a29-e757-48d1-9933-46ce71843e38",
+      "narrative_text": "Victim fell for a phishing website mimicking a popular exchange login. Assets drained and transferred to 0x742d35Cc6634C0532925a3b844Bc454e4438f44e.",
+      "fraud_typology": "task_based_fraud",
+      "amount_lost": 742666.35,
+      "filed_at": "2026-07-17T11:37:21.562625+00:00",
+      "state": "Haryana",
+      "district": "Faridabad",
+      "created_at": "2026-07-17T11:42:21.562625+00:00"
+    },
+    {
+      "id": "c4b032cc-d7c5-44a5-9304-317faf42e12f",
+      "ncrp_ref": "NCRP-2026-001009",
+      "source_platform": "sahyog",
+      "complainant_id": "6afdc61c-9f1f-4459-ae69-431cff89f81d",
+      "narrative_text": "Victim was contacted on WhatsApp posing as institutional crypto brokers promising 300% weekly return. Deposited funds to 0x742d35Cc6634C0532925a3b844Bc454e4438f44e.",
+      "fraud_typology": "task_based_fraud",
+      "amount_lost": 210333.65,
+      "filed_at": "2026-08-24T23:37:21.562625+00:00",
+      "state": "Gujarat",
+      "district": "Ahmedabad",
+      "created_at": "2026-08-24T23:42:21.562625+00:00"
+    },
+    {
+      "id": "f16287e4-e9c3-49e0-b602-f8ac10f1bc81",
+      "ncrp_ref": "NCRP-2026-001010",
+      "source_platform": "sahyog",
+      "complainant_id": "e8da1466-4dd7-4c25-a4cc-1e9e34d81961",
+      "narrative_text": "Victim joined a VIP crypto trading signal group. Followed instructions to deposit into malicious smart contract/wallet 0x742d35Cc6634C0532925a3b844Bc454e4438f44e.",
+      "fraud_typology": "task_based_fraud",
+      "amount_lost": 663457.34,
+      "filed_at": "2026-08-07T03:37:21.562625+00:00",
+      "state": "West Bengal",
+      "district": "North 24 Parganas",
+      "created_at": "2026-08-07T03:42:21.562625+00:00"
+    },
+    {
+      "id": "434308bc-89fa-4a68-8fb5-d27bbeb79919",
+      "ncrp_ref": "NCRP-2026-001011",
+      "source_platform": "ncrp",
+      "complainant_id": "2aaf54fd-9b49-4700-adba-78053b8d226b",
+      "narrative_text": "Victim reported extortion call claiming compromising video. Forced to purchase USDT and send to suspect wallet TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t.",
+      "fraud_typology": "sextortion",
+      "amount_lost": 349903.68,
+      "filed_at": "2026-07-20T21:37:21.562625+00:00",
+      "state": "Uttar Pradesh",
+      "district": "Agra",
+      "created_at": "2026-07-20T21:42:21.562625+00:00"
+    },
+    {
+      "id": "827050a8-2369-4584-bf5e-9ff0ff50bde4",
+      "ncrp_ref": "NCRP-2026-001012",
+      "source_platform": "manual",
+      "complainant_id": "405ce795-f94a-4f15-be1e-184ecbe3c613",
+      "narrative_text": "Victim was lured into a fake YouTube rating task scheme. Asked to deposit \u20b9113,636.59 in crypto to unlock earnings at address TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t.",
+      "fraud_typology": "sextortion",
+      "amount_lost": 113636.59,
+      "filed_at": "2026-08-24T06:37:21.562625+00:00",
+      "state": "Karnataka",
+      "district": "Mangaluru",
+      "created_at": "2026-08-24T06:42:21.562625+00:00"
+    },
+    {
+      "id": "6c12ace8-ae34-4454-8ac5-b68c28f49481",
+      "ncrp_ref": "NCRP-2026-001013",
+      "source_platform": "sahyog",
+      "complainant_id": "db2b3c11-9126-47bf-8b21-766134069213",
+      "narrative_text": "Victim fell for a phishing website mimicking a popular exchange login. Assets drained and transferred to TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t.",
+      "fraud_typology": "sextortion",
+      "amount_lost": 319337.12,
+      "filed_at": "2026-07-19T19:37:21.562625+00:00",
+      "state": "Gujarat",
+      "district": "Ahmedabad",
+      "created_at": "2026-07-19T19:42:21.562625+00:00"
+    },
+    {
+      "id": "1c8eaee9-5715-4d6f-a416-1293c4c2e2e3",
+      "ncrp_ref": "NCRP-2026-001014",
+      "source_platform": "manual",
+      "complainant_id": "db8cb6df-e608-4107-b6c0-b15bd361399a",
+      "narrative_text": "Victim joined a VIP crypto trading signal group. Followed instructions to deposit into malicious smart contract/wallet bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh.",
+      "fraud_typology": "part_time_job_fraud",
+      "amount_lost": 354335.68,
+      "filed_at": "2026-07-29T09:37:21.562625+00:00",
+      "state": "West Bengal",
+      "district": "Howrah",
+      "created_at": "2026-07-29T09:42:21.562625+00:00"
+    },
+    {
+      "id": "c30ff46e-8026-495f-b8cd-a88b436d76e2",
+      "ncrp_ref": "NCRP-2026-001015",
+      "source_platform": "manual",
+      "complainant_id": "af093411-dfff-483c-8ea6-86d031a891fb",
+      "narrative_text": "Victim reported extortion call claiming compromising video. Forced to purchase USDT and send to suspect wallet bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh.",
+      "fraud_typology": "part_time_job_fraud",
+      "amount_lost": 405377.17,
+      "filed_at": "2026-08-20T13:37:21.562625+00:00",
+      "state": "Uttar Pradesh",
+      "district": "Lucknow",
+      "created_at": "2026-08-20T13:42:21.562625+00:00"
+    },
+    {
+      "id": "52fbe43b-9954-4eb4-8025-7ad1eb2263dd",
+      "ncrp_ref": "NCRP-2026-001016",
+      "source_platform": "ncrp",
+      "complainant_id": "9f94ca5c-0873-4ee2-8719-3f988867271a",
+      "narrative_text": "Victim was lured into a fake YouTube rating task scheme. Asked to deposit \u20b963,633.72 in crypto to unlock earnings at address 0x89205A3A3b2A69De6Dbf7f01ED13B2108B2c43e7.",
+      "fraud_typology": "phishing",
+      "amount_lost": 63633.72,
+      "filed_at": "2026-08-04T00:37:21.562625+00:00",
+      "state": "West Bengal",
+      "district": "Howrah",
+      "created_at": "2026-08-04T00:42:21.562625+00:00"
+    },
+    {
+      "id": "f26b4776-913e-4de2-a0c5-3cb83da9c2a9",
+      "ncrp_ref": "NCRP-2026-001017",
+      "source_platform": "ncrp",
+      "complainant_id": "c2aae91f-2545-452b-8c0d-bcc9fd27bcd3",
+      "narrative_text": "Victim fell for a phishing website mimicking a popular exchange login. Assets drained and transferred to 0x89205A3A3b2A69De6Dbf7f01ED13B2108B2c43e7.",
+      "fraud_typology": "phishing",
+      "amount_lost": 109957.42,
+      "filed_at": "2026-07-27T07:37:21.562625+00:00",
+      "state": "Haryana",
+      "district": "Gurugram",
+      "created_at": "2026-07-27T07:42:21.562625+00:00"
+    },
+    {
+      "id": "f264accc-79ac-4b1e-a8e5-6e0c20de435d",
+      "ncrp_ref": "NCRP-2026-001018",
+      "source_platform": "ncrp",
+      "complainant_id": "8c327adf-21b3-48f0-a8e3-73500e93d7bb",
+      "narrative_text": "Complainant reported fraudulent transaction to TUEbqomDnLSjiQVzaV8GF5N2ecFeF15nh4 on TRON blockchain.",
+      "fraud_typology": "loan_app_fraud",
+      "amount_lost": 273044.7,
+      "filed_at": "2026-07-03T09:37:21.562625+00:00",
+      "state": "Gujarat",
+      "district": "Ahmedabad",
+      "created_at": "2026-07-03T09:37:21.562625+00:00"
+    },
+    {
+      "id": "ab4220a7-474a-493b-bced-df2d839fbc50",
+      "ncrp_ref": "NCRP-2026-001019",
+      "source_platform": "ncrp",
+      "complainant_id": "f4ac5f6d-fe97-4e59-956e-7afecb29c392",
+      "narrative_text": "Complainant reported fraudulent transaction to TyddXGsXtTD77jUPUTWxo4kii74SoNtx7G on TRON blockchain.",
+      "fraud_typology": "crypto_doubling",
+      "amount_lost": 167841.44,
+      "filed_at": "2026-08-19T09:37:21.562625+00:00",
+      "state": "Gujarat",
+      "district": "Surat",
+      "created_at": "2026-08-19T09:37:21.562625+00:00"
+    },
+    {
+      "id": "dfde4fbf-3ff3-40bf-b66e-cb15474ebc19",
+      "ncrp_ref": "NCRP-2026-001020",
+      "source_platform": "manual",
+      "complainant_id": "6feba3d5-6310-47ed-93f0-51d27ba00e89",
+      "narrative_text": "Complainant reported fraudulent transaction to T74ibv16qwGBTYXExSz4BR1RHssWKUmosc on TRON blockchain.",
+      "fraud_typology": "investment_fraud",
+      "amount_lost": 69120.89,
+      "filed_at": "2026-08-14T09:37:21.562625+00:00",
+      "state": "Rajasthan",
+      "district": "Jodhpur",
+      "created_at": "2026-08-14T09:37:21.562625+00:00"
+    },
+    {
+      "id": "bf7b539b-0f9a-4a4b-8acd-4e10bc594585",
+      "ncrp_ref": "NCRP-2026-001021",
+      "source_platform": "manual",
+      "complainant_id": "53a911de-ac3a-4700-9aa6-2d2588440fa4",
+      "narrative_text": "Complainant reported fraudulent transaction to 0x5125227c3712da86a78c49ea20e32684b27b95e9 on ETH blockchain.",
+      "fraud_typology": "phishing",
+      "amount_lost": 165748.1,
+      "filed_at": "2026-07-16T09:37:21.562625+00:00",
+      "state": "Haryana",
+      "district": "Panipat",
+      "created_at": "2026-07-16T09:37:21.562625+00:00"
+    },
+    {
+      "id": "2260e70f-e0cc-4dc5-b05d-b76e1a84a51a",
+      "ncrp_ref": "NCRP-2026-001022",
+      "source_platform": "manual",
+      "complainant_id": "ce1ae2dc-87dd-4e87-81ef-0cacb368be06",
+      "narrative_text": "Complainant reported fraudulent transaction to TcAJKfEnNEkhwHZYHzw46hUvJ31Nr9hHBp on TRON blockchain.",
+      "fraud_typology": "task_based_fraud",
+      "amount_lost": 174858.46,
+      "filed_at": "2026-08-20T09:37:21.562625+00:00",
+      "state": "Rajasthan",
+      "district": "Kota",
+      "created_at": "2026-08-20T09:37:21.562625+00:00"
+    },
+    {
+      "id": "093923de-8bab-4e3b-a628-6bfbe767dcea",
+      "ncrp_ref": "NCRP-2026-001023",
+      "source_platform": "manual",
+      "complainant_id": "75d736fb-1520-4bb9-9474-2d9b58793858",
+      "narrative_text": "Complainant reported fraudulent transaction to 1U93LQzsx3zPEkGj7PrcyxTgpAGxBttCyT on BTC blockchain.",
+      "fraud_typology": "crypto_doubling",
+      "amount_lost": 224920.87,
+      "filed_at": "2026-08-06T09:37:21.562625+00:00",
+      "state": "Maharashtra",
+      "district": "Pune",
+      "created_at": "2026-08-06T09:37:21.562625+00:00"
+    },
+    {
+      "id": "3f87e362-cf8d-446a-bc2c-bb0ddd334cc7",
+      "ncrp_ref": "NCRP-2026-001024",
+      "source_platform": "manual",
+      "complainant_id": "6f2ee73f-b2f7-47e5-b0c0-af886c7c0e6c",
+      "narrative_text": "Complainant reported fraudulent transaction to 1Rx3wXFDuWPLusxFF2jDSNJx5rJPiZSkvb on BTC blockchain.",
+      "fraud_typology": "sextortion",
+      "amount_lost": 47872.4,
+      "filed_at": "2026-08-11T09:37:21.562625+00:00",
+      "state": "Telangana",
+      "district": "Hyderabad",
+      "created_at": "2026-08-11T09:37:21.562625+00:00"
+    },
+    {
+      "id": "09cb3942-43f5-4a85-bbc9-f87af668a617",
+      "ncrp_ref": "NCRP-2026-001025",
+      "source_platform": "sahyog",
+      "complainant_id": "4993085c-0cd6-405f-982c-3a2ceed4d1a1",
+      "narrative_text": "Complainant reported fraudulent transaction to TsMUfZ8RzdDH3nU1atbkoppjDQU5jNgMjw on TRON blockchain.",
+      "fraud_typology": "crypto_doubling",
+      "amount_lost": 159529.91,
+      "filed_at": "2026-07-16T09:37:21.562625+00:00",
+      "state": "Delhi",
+      "district": "South Delhi",
+      "created_at": "2026-07-16T09:37:21.562625+00:00"
+    },
+    {
+      "id": "8dedf9fb-4bb0-4f20-b27c-40266703b636",
+      "ncrp_ref": "NCRP-2026-001026",
+      "source_platform": "ncrp",
+      "complainant_id": "ab66b986-4869-4f6c-ad10-11987663059d",
+      "narrative_text": "Complainant reported fraudulent transaction to 0x59c0996daeee6f529a279764017f2ed6cfc7403d on ETH blockchain.",
+      "fraud_typology": "part_time_job_fraud",
+      "amount_lost": 244171.31,
+      "filed_at": "2026-07-14T09:37:21.562625+00:00",
+      "state": "Gujarat",
+      "district": "Surat",
+      "created_at": "2026-07-14T09:37:21.562625+00:00"
+    },
+    {
+      "id": "d92c9227-eadf-4085-bfcb-75468eb22579",
+      "ncrp_ref": "NCRP-2026-001027",
+      "source_platform": "manual",
+      "complainant_id": "bde43704-2059-4d58-97ea-cf8f38eab473",
+      "narrative_text": "Complainant reported fraudulent transaction to 0xaede5fe878f78e2978aa2447c462ddaed16dc0cf on ETH blockchain.",
+      "fraud_typology": "crypto_doubling",
+      "amount_lost": 100104.61,
+      "filed_at": "2026-08-03T09:37:21.562625+00:00",
+      "state": "Maharashtra",
+      "district": "Nagpur",
+      "created_at": "2026-08-03T09:37:21.562625+00:00"
+    },
+    {
+      "id": "ccc42903-8bcf-43a1-bc10-fa52bf5d2fdf",
+      "ncrp_ref": "NCRP-2026-001028",
+      "source_platform": "sahyog",
+      "complainant_id": "99cc9ee7-cf5a-4dd8-be1a-229fd5cc92ae",
+      "narrative_text": "Complainant reported fraudulent transaction to 1JUY2RNjktSoBvW9gb2Sedj26iU9xWC4HR on BTC blockchain.",
+      "fraud_typology": "crypto_doubling",
+      "amount_lost": 144589.31,
+      "filed_at": "2026-08-06T09:37:21.562625+00:00",
+      "state": "Telangana",
+      "district": "Hyderabad",
+      "created_at": "2026-08-06T09:37:21.562625+00:00"
+    },
+    {
+      "id": "6bebac31-d4f8-4d72-b382-1cfdc083b73a",
+      "ncrp_ref": "NCRP-2026-001029",
+      "source_platform": "sahyog",
+      "complainant_id": "5a61881a-c354-4b7e-bf40-38521b527054",
+      "narrative_text": "Complainant reported fraudulent transaction to 1pb4PFi5ri3q2GDv2gAG9Xj8dEWmHrQBff on BTC blockchain.",
+      "fraud_typology": "investment_fraud",
+      "amount_lost": 289945.42,
+      "filed_at": "2026-08-21T09:37:21.562625+00:00",
+      "state": "Delhi",
+      "district": "North Delhi",
+      "created_at": "2026-08-21T09:37:21.562625+00:00"
+    },
+    {
+      "id": "f54ad0a2-e874-46d7-ad66-a1bd93676a02",
+      "ncrp_ref": "NCRP-2026-001030",
+      "source_platform": "manual",
+      "complainant_id": "10c6d62f-0159-43ce-ab7e-5c6dec4a9033",
+      "narrative_text": "Complainant reported fraudulent transaction to 15emvhG7mrLwkft8sds3PbUjQ5ZiN1wTuY on BTC blockchain.",
+      "fraud_typology": "part_time_job_fraud",
+      "amount_lost": 288824.46,
+      "filed_at": "2026-07-18T09:37:21.562625+00:00",
+      "state": "Delhi",
+      "district": "West Delhi",
+      "created_at": "2026-07-18T09:37:21.562625+00:00"
+    },
+    {
+      "id": "bbda0242-2d17-4fc9-af7c-15ea272a6d8e",
+      "ncrp_ref": "NCRP-2026-001031",
+      "source_platform": "manual",
+      "complainant_id": "4e8d3487-bb5e-4403-956d-c1e1b5465852",
+      "narrative_text": "Complainant reported fraudulent transaction to TtbrXWUuoeJMwGv6JyVGqWdgjRN2YwMCYE on TRON blockchain.",
+      "fraud_typology": "phishing",
+      "amount_lost": 111996.57,
+      "filed_at": "2026-07-02T09:37:21.562625+00:00",
+      "state": "Telangana",
+      "district": "Cyberabad",
+      "created_at": "2026-07-02T09:37:21.562625+00:00"
+    },
+    {
+      "id": "30e912f2-f2b4-4abf-8441-aefd0299436a",
+      "ncrp_ref": "NCRP-2026-001032",
+      "source_platform": "manual",
+      "complainant_id": "ddbb5f1e-bc4a-4125-927f-d48bfe28cbeb",
+      "narrative_text": "Complainant reported fraudulent transaction to 0x7ffe0297c79bfbdabe898736a3566f893697b590 on ETH blockchain.",
+      "fraud_typology": "phishing",
+      "amount_lost": 93178.73,
+      "filed_at": "2026-08-24T09:37:21.562625+00:00",
+      "state": "West Bengal",
+      "district": "Kolkata",
+      "created_at": "2026-08-24T09:37:21.562625+00:00"
+    },
+    {
+      "id": "de53790a-a34b-4cf6-a053-da42f1afdb65",
+      "ncrp_ref": "NCRP-2026-001033",
+      "source_platform": "sahyog",
+      "complainant_id": "e49614bf-a875-437a-92c8-0e3a41c38800",
+      "narrative_text": "Complainant reported fraudulent transaction to 1dKXXVNC4HxX8u5SY5dhk4AAtdL6G8cqTf on BTC blockchain.",
+      "fraud_typology": "crypto_doubling",
+      "amount_lost": 79320.83,
+      "filed_at": "2026-07-25T09:37:21.562625+00:00",
+      "state": "Haryana",
+      "district": "Panipat",
+      "created_at": "2026-07-25T09:37:21.562625+00:00"
+    },
+    {
+      "id": "dc33e1f9-4c1f-45ab-b156-29eee893be3d",
+      "ncrp_ref": "NCRP-2026-001034",
+      "source_platform": "sahyog",
+      "complainant_id": "99c63591-4e69-4cd3-bfb0-d7a0db55fdc9",
+      "narrative_text": "Complainant reported fraudulent transaction to Tg4gp7qEhEHj6BGCc5B1TVmfXK3FKnKmxW on TRON blockchain.",
+      "fraud_typology": "impersonation_scam",
+      "amount_lost": 278314.65,
+      "filed_at": "2026-07-08T09:37:21.562625+00:00",
+      "state": "Delhi",
+      "district": "North Delhi",
+      "created_at": "2026-07-08T09:37:21.562625+00:00"
+    },
+    {
+      "id": "a5cb63a2-398d-4ca6-8b68-70b51d61fac3",
+      "ncrp_ref": "NCRP-2026-001035",
+      "source_platform": "manual",
+      "complainant_id": "b1c2b058-9df6-46b6-b284-4fa05e0bdd11",
+      "narrative_text": "Complainant reported fraudulent transaction to 154BsLfpudKV8WmLmSJZbYV6f3yUpMfH26 on BTC blockchain.",
+      "fraud_typology": "phishing",
+      "amount_lost": 299878.14,
+      "filed_at": "2026-07-15T09:37:21.562625+00:00",
+      "state": "Gujarat",
+      "district": "Ahmedabad",
+      "created_at": "2026-07-15T09:37:21.562625+00:00"
+    },
+    {
+      "id": "2cd94cbb-c19a-458c-835b-1c8c0a4c9f7f",
+      "ncrp_ref": "NCRP-2026-001036",
+      "source_platform": "sahyog",
+      "complainant_id": "12d04c3b-770f-4e72-9e03-df2e30904cdb",
+      "narrative_text": "Complainant reported fraudulent transaction to 0x5df2fbdaa35adf9c1e2a8a3c0ed16bfe16849ef3 on ETH blockchain.",
+      "fraud_typology": "sextortion",
+      "amount_lost": 242804.41,
+      "filed_at": "2026-07-13T09:37:21.562625+00:00",
+      "state": "Maharashtra",
+      "district": "Nashik",
+      "created_at": "2026-07-13T09:37:21.562625+00:00"
+    },
+    {
+      "id": "687213f9-8d60-4936-8380-2b708d03c91e",
+      "ncrp_ref": "NCRP-2026-001037",
+      "source_platform": "manual",
+      "complainant_id": "d4daf2ee-bf54-4903-8a42-3dc81fc917bf",
+      "narrative_text": "Complainant reported fraudulent transaction to 1W8ivAYnKZnJTvXXGWcARDfZpy9x5JrswT on BTC blockchain.",
+      "fraud_typology": "phishing",
+      "amount_lost": 91144.21,
+      "filed_at": "2026-08-27T09:37:21.562625+00:00",
+      "state": "Telangana",
+      "district": "Warangal",
+      "created_at": "2026-08-27T09:37:21.562625+00:00"
+    },
+    {
+      "id": "9475dbc9-9641-4ced-9664-d2644c6e27ff",
+      "ncrp_ref": "NCRP-2026-001038",
+      "source_platform": "ncrp",
+      "complainant_id": "6f910e22-893c-4dbe-bed9-dfa8656831fd",
+      "narrative_text": "Complainant reported fraudulent transaction to 1VbXPNcqbRWMxDmGdRFwrT3MpXntRRjsui on BTC blockchain.",
+      "fraud_typology": "loan_app_fraud",
+      "amount_lost": 289974.96,
+      "filed_at": "2026-08-19T09:37:21.562625+00:00",
+      "state": "Karnataka",
+      "district": "Mangaluru",
+      "created_at": "2026-08-19T09:37:21.562625+00:00"
+    },
+    {
+      "id": "1986b4b2-70b7-4868-9854-80f0dfcaf0b7",
+      "ncrp_ref": "NCRP-2026-001039",
+      "source_platform": "sahyog",
+      "complainant_id": "15344834-caa8-4673-a537-657b8960dfc3",
+      "narrative_text": "Complainant reported fraudulent transaction to TATxiA5XsHNgmSi6wNwkwbRMhnyqYxb3g5 on TRON blockchain.",
+      "fraud_typology": "task_based_fraud",
+      "amount_lost": 299266.39,
+      "filed_at": "2026-07-11T09:37:21.562625+00:00",
+      "state": "Gujarat",
+      "district": "Vadodara",
+      "created_at": "2026-07-11T09:37:21.562625+00:00"
+    },
+    {
+      "id": "a23d4c2f-c2a7-4689-9933-918cfa745761",
+      "ncrp_ref": "NCRP-2026-001040",
+      "source_platform": "sahyog",
+      "complainant_id": "a780732e-ca04-48c4-809f-4c8f6cd47987",
+      "narrative_text": "Complainant reported fraudulent transaction to 1mLz23Ms4KPQUAGaTdksCBC6gxRgkGYeAF on BTC blockchain.",
+      "fraud_typology": "investment_fraud",
+      "amount_lost": 145977.59,
+      "filed_at": "2026-07-16T09:37:21.562625+00:00",
+      "state": "Rajasthan",
+      "district": "Udaipur",
+      "created_at": "2026-07-16T09:37:21.562625+00:00"
+    },
+    {
+      "id": "8beddb12-ad77-482f-89a2-3a89e6b5a92c",
+      "ncrp_ref": "NCRP-2026-001041",
+      "source_platform": "ncrp",
+      "complainant_id": "1e1942bc-09a2-469a-828a-da61955652ff",
+      "narrative_text": "Complainant reported fraudulent transaction to 0x9d8e96cf37cb990c801f97b7684319e1b429ad56 on ETH blockchain.",
+      "fraud_typology": "phishing",
+      "amount_lost": 166292.93,
+      "filed_at": "2026-06-30T09:37:21.562625+00:00",
+      "state": "Karnataka",
+      "district": "Mysuru",
+      "created_at": "2026-06-30T09:37:21.562625+00:00"
+    },
+    {
+      "id": "f1b64afe-d31e-4f1a-a9ff-1cae41c8ca8c",
+      "ncrp_ref": "NCRP-2026-001042",
+      "source_platform": "manual",
+      "complainant_id": "aafe72ac-8b18-45c5-8875-c1629a130279",
+      "narrative_text": "Complainant reported fraudulent transaction to TxNt8W5AqFxkokSwtcQ6sS1Hb8WQkpkHeR on TRON blockchain.",
+      "fraud_typology": "investment_fraud",
+      "amount_lost": 207328.42,
+      "filed_at": "2026-07-28T09:37:21.562625+00:00",
+      "state": "Telangana",
+      "district": "Hyderabad",
+      "created_at": "2026-07-28T09:37:21.562625+00:00"
+    },
+    {
+      "id": "53f8382b-8fb8-44e4-b173-8856e25d36eb",
+      "ncrp_ref": "NCRP-2026-001043",
+      "source_platform": "manual",
+      "complainant_id": "f74f1d26-dfc5-4ee2-a37f-eaa4af7eafd5",
+      "narrative_text": "Complainant reported fraudulent transaction to 1huWmLiT8933LY87Gyb9RWQjpmbTepoAyT on BTC blockchain.",
+      "fraud_typology": "investment_fraud",
+      "amount_lost": 190460.88,
+      "filed_at": "2026-08-10T09:37:21.562625+00:00",
+      "state": "Delhi",
+      "district": "West Delhi",
+      "created_at": "2026-08-10T09:37:21.562625+00:00"
+    },
+    {
+      "id": "71d79665-7181-4dcf-b79e-fc6e5edb0d3c",
+      "ncrp_ref": "NCRP-2026-001044",
+      "source_platform": "ncrp",
+      "complainant_id": "07982bff-ac22-4e35-9233-d0113bf69c8d",
+      "narrative_text": "Complainant reported fraudulent transaction to 1kQbziP4SJD8wuW6jEihf24sNG9sdE5vqc on BTC blockchain.",
+      "fraud_typology": "loan_app_fraud",
+      "amount_lost": 246720.1,
+      "filed_at": "2026-08-13T09:37:21.562625+00:00",
+      "state": "Gujarat",
+      "district": "Surat",
+      "created_at": "2026-08-13T09:37:21.562625+00:00"
+    },
+    {
+      "id": "00b9d4a3-9892-40ac-a689-33a9c9e48e8c",
+      "ncrp_ref": "NCRP-2026-001045",
+      "source_platform": "manual",
+      "complainant_id": "7f4019df-2b92-4b24-bbea-e0784090a33b",
+      "narrative_text": "Complainant reported fraudulent transaction to 1bHtC8jx291PssGeM2CH49pTa8p5XVrQZe on BTC blockchain.",
+      "fraud_typology": "investment_fraud",
+      "amount_lost": 158594.03,
+      "filed_at": "2026-07-19T09:37:21.562625+00:00",
+      "state": "Delhi",
+      "district": "West Delhi",
+      "created_at": "2026-07-19T09:37:21.562625+00:00"
+    },
+    {
+      "id": "a8addf36-ddf2-45eb-a8a3-f341c8819065",
+      "ncrp_ref": "NCRP-2026-001046",
+      "source_platform": "sahyog",
+      "complainant_id": "66a504de-e6d2-481e-97ca-6138f02eb1b4",
+      "narrative_text": "Complainant reported fraudulent transaction to 14XwSUk7YnV5z6MfA59JghecnMRfaKWZfU on BTC blockchain.",
+      "fraud_typology": "impersonation_scam",
+      "amount_lost": 258045.93,
+      "filed_at": "2026-07-17T09:37:21.562625+00:00",
+      "state": "Delhi",
+      "district": "New Delhi",
+      "created_at": "2026-07-17T09:37:21.562625+00:00"
+    },
+    {
+      "id": "69efafb1-3a7e-4e14-a359-eee173991a47",
+      "ncrp_ref": "NCRP-2026-001047",
+      "source_platform": "sahyog",
+      "complainant_id": "7bd067d0-5219-4fd6-a7ce-05ef3bc8153d",
+      "narrative_text": "Complainant reported fraudulent transaction to 0x3ada8b4f2222d3b41a3dbd199b364f73bb387d08 on ETH blockchain.",
+      "fraud_typology": "phishing",
+      "amount_lost": 92882.06,
+      "filed_at": "2026-07-10T09:37:21.562625+00:00",
+      "state": "Maharashtra",
+      "district": "Pune",
+      "created_at": "2026-07-10T09:37:21.562625+00:00"
+    },
+    {
+      "id": "deaf528d-2e70-4838-8190-262059dcabd0",
+      "ncrp_ref": "NCRP-2026-001048",
+      "source_platform": "ncrp",
+      "complainant_id": "7f9560c9-261c-43e5-881d-9c206cd0a7b9",
+      "narrative_text": "Complainant reported fraudulent transaction to 1Aph26paERTWNBQLoMrdf6y4ABqg4k6JVj on BTC blockchain.",
+      "fraud_typology": "phishing",
+      "amount_lost": 188016.66,
+      "filed_at": "2026-08-01T09:37:21.562625+00:00",
+      "state": "Tamil Nadu",
+      "district": "Coimbatore",
+      "created_at": "2026-08-01T09:37:21.562625+00:00"
+    },
+    {
+      "id": "585d3f86-1d23-44e6-8329-20b7c143f426",
+      "ncrp_ref": "NCRP-2026-001049",
+      "source_platform": "sahyog",
+      "complainant_id": "b99f5f27-55be-431d-8793-934d9533f74c",
+      "narrative_text": "Complainant reported fraudulent transaction to TeYajL3FSf41ELEr9qHKM81YpUC9RbnFZc on TRON blockchain.",
+      "fraud_typology": "investment_fraud",
+      "amount_lost": 128165.28,
+      "filed_at": "2026-07-11T09:37:21.562625+00:00",
+      "state": "Telangana",
+      "district": "Hyderabad",
+      "created_at": "2026-07-11T09:37:21.562625+00:00"
+    },
+    {
+      "id": "13eecdc6-ebd1-4d2c-b5b2-745504cc3ede",
+      "ncrp_ref": "NCRP-2026-001050",
+      "source_platform": "sahyog",
+      "complainant_id": "37d2c232-00bf-4943-97c9-0e04088fed25",
+      "narrative_text": "Complainant reported fraudulent transaction to TSnhTK8S2MBtgWvmQ6Uw7GUeSa6SxLpNFN on TRON blockchain.",
+      "fraud_typology": "impersonation_scam",
+      "amount_lost": 160487.74,
+      "filed_at": "2026-08-20T09:37:21.562625+00:00",
+      "state": "Karnataka",
+      "district": "Bengaluru Urban",
+      "created_at": "2026-08-20T09:37:21.562625+00:00"
+    },
+    {
+      "id": "d1a69d87-f54e-4019-ba35-844e59e1ac09",
+      "ncrp_ref": "NCRP-2026-001051",
+      "source_platform": "manual",
+      "complainant_id": "c600f48c-7310-462f-83e5-95790e26c463",
+      "narrative_text": "Complainant reported fraudulent transaction to 1AHDCfAqqi5CrhYWqdqeVkydihgMxhMAV5 on BTC blockchain.",
+      "fraud_typology": "phishing",
+      "amount_lost": 194944.76,
+      "filed_at": "2026-07-08T09:37:21.562625+00:00",
+      "state": "Rajasthan",
+      "district": "Kota",
+      "created_at": "2026-07-08T09:37:21.562625+00:00"
+    },
+    {
+      "id": "12fe28bf-81e0-4489-9a18-e2a30e614bcd",
+      "ncrp_ref": "NCRP-2026-001052",
+      "source_platform": "ncrp",
+      "complainant_id": "925d144f-6e24-42bd-887e-0636d2e4c6dd",
+      "narrative_text": "Complainant reported fraudulent transaction to 1QvK5ixw6gfZRWecspz3VtdiDMfXZA4V7t on BTC blockchain.",
+      "fraud_typology": "sextortion",
+      "amount_lost": 39033.8,
+      "filed_at": "2026-07-17T09:37:21.562625+00:00",
+      "state": "Telangana",
+      "district": "Warangal",
+      "created_at": "2026-07-17T09:37:21.562625+00:00"
+    }
+  ],
+  "complaint_wallets": [
+    {
+      "complaint_id": "0822e8f3-6c03-4199-972a-846916419f82",
+      "wallet_id": "bdd640fb-0667-4ad1-9c80-317fa3b1799d",
+      "reported_at": "2026-08-12T17:42:21.562625+00:00"
+    },
+    {
+      "complaint_id": "a65ed389-b74d-4fb1-b2e7-06298fadc1a6",
+      "wallet_id": "bdd640fb-0667-4ad1-9c80-317fa3b1799d",
+      "reported_at": "2026-07-21T01:42:21.562625+00:00"
+    },
+    {
+      "complaint_id": "47229389-571a-4876-ac30-7511b2b9437a",
+      "wallet_id": "bdd640fb-0667-4ad1-9c80-317fa3b1799d",
+      "reported_at": "2026-08-06T06:42:21.562625+00:00"
+    },
+    {
+      "complaint_id": "580d7b71-d8f5-4413-9be6-128e18c26797",
+      "wallet_id": "bdd640fb-0667-4ad1-9c80-317fa3b1799d",
+      "reported_at": "2026-08-24T10:42:21.562625+00:00"
+    },
+    {
+      "complaint_id": "60e7a113-ec1b-4ca1-b91e-1d4c1ff49b78",
+      "wallet_id": "bdd640fb-0667-4ad1-9c80-317fa3b1799d",
+      "reported_at": "2026-07-17T14:42:21.562625+00:00"
+    },
+    {
+      "complaint_id": "0bbb2599-11ce-4dd2-b45e-d1f03139d32c",
+      "wallet_id": "bdd640fb-0667-4ad1-9c80-317fa3b1799d",
+      "reported_at": "2026-08-22T02:42:21.562625+00:00"
+    },
+    {
+      "complaint_id": "aefcfad8-efc8-4849-b3aa-7efe4458a885",
+      "wallet_id": "d58842de-a2bc-472f-b412-b29347294739",
+      "reported_at": "2026-07-18T04:42:21.562625+00:00"
+    },
+    {
+      "complaint_id": "6123fdf7-7656-4f72-a9d4-beef3eabedcb",
+      "wallet_id": "d58842de-a2bc-472f-b412-b29347294739",
+      "reported_at": "2026-07-17T11:42:21.562625+00:00"
+    },
+    {
+      "complaint_id": "c4b032cc-d7c5-44a5-9304-317faf42e12f",
+      "wallet_id": "d58842de-a2bc-472f-b412-b29347294739",
+      "reported_at": "2026-08-24T23:42:21.562625+00:00"
+    },
+    {
+      "complaint_id": "f16287e4-e9c3-49e0-b602-f8ac10f1bc81",
+      "wallet_id": "d58842de-a2bc-472f-b412-b29347294739",
+      "reported_at": "2026-08-07T03:42:21.562625+00:00"
+    },
+    {
+      "complaint_id": "434308bc-89fa-4a68-8fb5-d27bbeb79919",
+      "wallet_id": "a491f0b2-ea1f-4a65-a27a-984d654821d0",
+      "reported_at": "2026-07-20T21:42:21.562625+00:00"
+    },
+    {
+      "complaint_id": "827050a8-2369-4584-bf5e-9ff0ff50bde4",
+      "wallet_id": "a491f0b2-ea1f-4a65-a27a-984d654821d0",
+      "reported_at": "2026-08-24T06:42:21.562625+00:00"
+    },
+    {
+      "complaint_id": "6c12ace8-ae34-4454-8ac5-b68c28f49481",
+      "wallet_id": "a491f0b2-ea1f-4a65-a27a-984d654821d0",
+      "reported_at": "2026-07-19T19:42:21.562625+00:00"
+    },
+    {
+      "complaint_id": "1c8eaee9-5715-4d6f-a416-1293c4c2e2e3",
+      "wallet_id": "f143262f-dc5c-4eed-8da0-365bf89897b9",
+      "reported_at": "2026-07-29T09:42:21.562625+00:00"
+    },
+    {
+      "complaint_id": "c30ff46e-8026-495f-b8cd-a88b436d76e2",
+      "wallet_id": "f143262f-dc5c-4eed-8da0-365bf89897b9",
+      "reported_at": "2026-08-20T13:42:21.562625+00:00"
+    },
+    {
+      "complaint_id": "52fbe43b-9954-4eb4-8025-7ad1eb2263dd",
+      "wallet_id": "2720797d-32eb-4689-9be5-78c781f631d4",
+      "reported_at": "2026-08-04T00:42:21.562625+00:00"
+    },
+    {
+      "complaint_id": "f26b4776-913e-4de2-a0c5-3cb83da9c2a9",
+      "wallet_id": "2720797d-32eb-4689-9be5-78c781f631d4",
+      "reported_at": "2026-07-27T07:42:21.562625+00:00"
+    },
+    {
+      "complaint_id": "f264accc-79ac-4b1e-a8e5-6e0c20de435d",
+      "wallet_id": "8715a103-43da-4043-aa45-c2ab8cbfedb0",
+      "reported_at": "2026-07-03T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "ab4220a7-474a-493b-bced-df2d839fbc50",
+      "wallet_id": "21df306f-8a0b-4c33-b6d8-393a7c441fe7",
+      "reported_at": "2026-08-19T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "dfde4fbf-3ff3-40bf-b66e-cb15474ebc19",
+      "wallet_id": "ceda8bbb-7171-4434-934c-6c92ec5b227c",
+      "reported_at": "2026-08-14T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "bf7b539b-0f9a-4a4b-8acd-4e10bc594585",
+      "wallet_id": "958ca9ba-0cd6-40c2-8ea2-622b504867ba",
+      "reported_at": "2026-07-16T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "2260e70f-e0cc-4dc5-b05d-b76e1a84a51a",
+      "wallet_id": "1b66b5a9-e3c4-4657-9d8c-bbac43b409ef",
+      "reported_at": "2026-08-20T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "093923de-8bab-4e3b-a628-6bfbe767dcea",
+      "wallet_id": "8d7248e2-951f-48d0-9e84-f058d5a804eb",
+      "reported_at": "2026-08-06T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "3f87e362-cf8d-446a-bc2c-bb0ddd334cc7",
+      "wallet_id": "b386f7a4-c991-403f-a8c1-3091444d610b",
+      "reported_at": "2026-08-11T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "09cb3942-43f5-4a85-bbc9-f87af668a617",
+      "wallet_id": "587ef344-6f3f-420c-98b8-e4cc1bc044fc",
+      "reported_at": "2026-07-16T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "8dedf9fb-4bb0-4f20-b27c-40266703b636",
+      "wallet_id": "aa38d0a1-6ba2-4efe-b11c-6eb62095eef6",
+      "reported_at": "2026-07-14T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "d92c9227-eadf-4085-bfcb-75468eb22579",
+      "wallet_id": "cd29a36f-2222-42e1-b4da-aebf1f115b76",
+      "reported_at": "2026-08-03T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "ccc42903-8bcf-43a1-bc10-fa52bf5d2fdf",
+      "wallet_id": "7cfc9b79-3875-494c-a5d6-f6e69a6ec2f5",
+      "reported_at": "2026-08-06T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "6bebac31-d4f8-4d72-b382-1cfdc083b73a",
+      "wallet_id": "78660765-14f7-4e8d-95bc-b8d04094dded",
+      "reported_at": "2026-08-21T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "f54ad0a2-e874-46d7-ad66-a1bd93676a02",
+      "wallet_id": "b70b3420-f104-4785-a58b-252360141de9",
+      "reported_at": "2026-07-18T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "bbda0242-2d17-4fc9-af7c-15ea272a6d8e",
+      "wallet_id": "45241ea6-a684-4099-b729-4951859131d2",
+      "reported_at": "2026-07-02T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "30e912f2-f2b4-4abf-8441-aefd0299436a",
+      "wallet_id": "680bac63-b856-4035-bdc9-829015eabb27",
+      "reported_at": "2026-08-24T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "de53790a-a34b-4cf6-a053-da42f1afdb65",
+      "wallet_id": "df6a8f93-1a43-4f0a-bdaa-39f0c0b6fce2",
+      "reported_at": "2026-07-25T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "dc33e1f9-4c1f-45ab-b156-29eee893be3d",
+      "wallet_id": "4e2d6645-6dc7-4ac7-bd72-b05096a9954f",
+      "reported_at": "2026-07-08T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "a5cb63a2-398d-4ca6-8b68-70b51d61fac3",
+      "wallet_id": "d39e198b-4400-4d5a-a88d-a71926242b40",
+      "reported_at": "2026-07-15T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "2cd94cbb-c19a-458c-835b-1c8c0a4c9f7f",
+      "wallet_id": "7135f221-a6c9-437f-84da-d06a7872bdeb",
+      "reported_at": "2026-07-13T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "687213f9-8d60-4936-8380-2b708d03c91e",
+      "wallet_id": "d7665cda-fe04-4059-b985-fb6217dc8eff",
+      "reported_at": "2026-08-27T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "9475dbc9-9641-4ced-9664-d2644c6e27ff",
+      "wallet_id": "dd81b7f5-7d59-41c6-a8f1-e091ffb8102d",
+      "reported_at": "2026-08-19T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "1986b4b2-70b7-4868-9854-80f0dfcaf0b7",
+      "wallet_id": "03edd1f8-74f9-4d17-a912-b4bf86a4bae4",
+      "reported_at": "2026-07-11T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "a23d4c2f-c2a7-4689-9933-918cfa745761",
+      "wallet_id": "7194eae2-19ba-47ae-9f61-5a5cb4323070",
+      "reported_at": "2026-07-16T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "8beddb12-ad77-482f-89a2-3a89e6b5a92c",
+      "wallet_id": "f1faf665-7115-43f3-92e8-9d1028711733",
+      "reported_at": "2026-06-30T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "f1b64afe-d31e-4f1a-a9ff-1cae41c8ca8c",
+      "wallet_id": "4b8e63d4-ce76-47ad-b7a6-7b947b5a611a",
+      "reported_at": "2026-07-28T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "53f8382b-8fb8-44e4-b173-8856e25d36eb",
+      "wallet_id": "a5cc8bf7-38ab-454c-9c2e-58deea4e3617",
+      "reported_at": "2026-08-10T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "71d79665-7181-4dcf-b79e-fc6e5edb0d3c",
+      "wallet_id": "5cd8fe1a-dafe-48a9-bc71-e0bef3579560",
+      "reported_at": "2026-08-13T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "00b9d4a3-9892-40ac-a689-33a9c9e48e8c",
+      "wallet_id": "250a4578-fbe9-4499-9bc0-80fd46fb7bf3",
+      "reported_at": "2026-07-19T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "a8addf36-ddf2-45eb-a8a3-f341c8819065",
+      "wallet_id": "a4b1f991-7542-4646-8d37-a539857dd3b3",
+      "reported_at": "2026-07-17T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "69efafb1-3a7e-4e14-a359-eee173991a47",
+      "wallet_id": "66132e69-7418-4109-93d1-bf0f56c438e4",
+      "reported_at": "2026-07-10T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "deaf528d-2e70-4838-8190-262059dcabd0",
+      "wallet_id": "6699cd99-a847-4ce7-90fa-6b5724ac2130",
+      "reported_at": "2026-08-01T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "585d3f86-1d23-44e6-8329-20b7c143f426",
+      "wallet_id": "ad9fb00d-4882-473c-9c63-45ab6e0ed1e8",
+      "reported_at": "2026-07-11T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "13eecdc6-ebd1-4d2c-b5b2-745504cc3ede",
+      "wallet_id": "6de59332-9364-43d0-9024-bdc6dcb33df3",
+      "reported_at": "2026-08-20T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "d1a69d87-f54e-4019-ba35-844e59e1ac09",
+      "wallet_id": "3c7c1d85-25cf-4041-90a6-43fea53bc024",
+      "reported_at": "2026-07-08T09:37:21.562625+00:00"
+    },
+    {
+      "complaint_id": "12fe28bf-81e0-4489-9a18-e2a30e614bcd",
+      "wallet_id": "09a0a0f6-73b0-4091-b634-c1694f76e388",
+      "reported_at": "2026-07-17T09:37:21.562625+00:00"
+    }
+  ],
+  "metadata": {
+    "total_complaints": 52,
+    "total_wallets": 40,
+    "total_links": 52,
+    "planted_clusters_count": 5
+  }
+}

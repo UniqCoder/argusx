@@ -1,0 +1,1244 @@
+openapi: "3.0.3"
+info:
+  title: Unigraph — Real-Time Crypto Fraud Attribution API
+  description: |
+    Backend API for Unigraph (SIH26183 — MHA/I4C).
+
+    **Auth schemes:**
+    - `bearerAuth` (JWT): all `/api/v1/...` routes except `/api/v1/auth/login` and `/api/v1/auth/refresh`
+    - `apiKeyAuth` (X-API-Key header): `/check-wallet` only — used by external VASPs, never by the frontend JWT client
+
+    **Error envelope** (all failures, every endpoint):
+    ```json
+    { "error": { "code": "string", "message": "string", "details": {} } }
+    ```
+
+    **Enums** are defined in `contracts/entities.md` and must never be extended inline.
+  version: "0.1.0"
+  contact:
+    name: Backend Owner (Rehan)
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+
+# ── Security schemes ─────────────────────────────────────────────────────────
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  # ── Shared schemas ──────────────────────────────────────────────────────────
+  schemas:
+    # ── Enums (closed — see entities.md) ─────────────────────────────────────
+    RiskTier:
+      type: string
+      enum: [critical, high, medium, low, unknown]
+      description: "Closed enum — maps to UI palette in PRD §14.1. Do not extend."
+
+    CaseStatus:
+      type: string
+      enum: [new, investigating, escalated_to_vasp, frozen, closed]
+      description: "Closed enum — matches Kanban columns exactly. Do not extend."
+
+    AlertAction:
+      type: string
+      enum: [allow, hold, block]
+      description: "Closed enum — returned by /check-wallet and stored on Alert records."
+
+    Chain:
+      type: string
+      enum: [BTC, ETH, TRON, BSC]
+
+    SourcePlatform:
+      type: string
+      enum: [ncrp, sahyog, manual]
+
+    TriggeredBy:
+      type: string
+      enum: [check_wallet_hook, registry_refresh, manual]
+
+    EvidenceDirection:
+      type: string
+      enum: [increases_risk, decreases_risk]
+
+    # ── Error envelope ────────────────────────────────────────────────────────
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              example: WALLET_NOT_FOUND
+            message:
+              type: string
+              example: "No wallet found for that address/chain pair."
+            details:
+              type: object
+              additionalProperties: true
+              example: { "address": "1A1zP1...", "chain": "BTC" }
+
+    # ── Pagination wrapper ────────────────────────────────────────────────────
+    PaginationMeta:
+      type: object
+      required: [total, page, page_size]
+      properties:
+        total:
+          type: integer
+          example: 142
+        page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 25
+
+    # ── Core entities ─────────────────────────────────────────────────────────
+    Wallet:
+      type: object
+      required: [id, address, chain]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        address:
+          type: string
+          example: "1A1zP1eP5QGefi2DMPTfTL5SLmv7Divf2"
+        chain:
+          $ref: "#/components/schemas/Chain"
+        risk_score:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.92
+        risk_tier:
+          $ref: "#/components/schemas/RiskTier"
+        vasp_identified:
+          type: string
+          nullable: true
+          example: "Binance"
+        cluster_id:
+          type: string
+          format: uuid
+          nullable: true
+          example: null
+        first_seen:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-01-15T08:30:00Z"
+        last_seen:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-08-20T14:22:11Z"
+
+    RiskEvidence:
+      type: object
+      required: [feature_name, contribution, direction]
+      properties:
+        feature_name:
+          type: string
+          example: "fan_in_count_1h"
+        contribution:
+          type: number
+          format: float
+          example: 0.31
+        direction:
+          $ref: "#/components/schemas/EvidenceDirection"
+
+    Hop:
+      type: object
+      required: [from_address, to_address, tx_hash, amount, chain, timestamp]
+      properties:
+        from_address:
+          type: string
+          example: "1A1zP1eP5QGefi2DMPTfTL5SLmv7Divf2"
+        to_address:
+          type: string
+          example: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
+        tx_hash:
+          type: string
+          example: "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"
+        amount:
+          type: number
+          format: float
+          example: 0.005
+        chain:
+          $ref: "#/components/schemas/Chain"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-08-10T09:14:00Z"
+
+    Complaint:
+      type: object
+      required: [id, source_platform, filed_at, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "c1a0b2e3-dead-4bad-beef-cafe12345678"
+        ncrp_ref:
+          type: string
+          nullable: true
+          example: "NCRP-2026-009123"
+        source_platform:
+          $ref: "#/components/schemas/SourcePlatform"
+        narrative_text:
+          type: string
+          nullable: true
+          description: "FIR narrative. NEVER sent to external APIs — local LLM only."
+          example: "Victim transferred ₹2L to wallet after investment scam promise..."
+        fraud_typology:
+          type: string
+          nullable: true
+          example: "investment_fraud"
+        amount_lost:
+          type: number
+          format: float
+          nullable: true
+          example: 200000.0
+        filed_at:
+          type: string
+          format: date-time
+          example: "2026-08-25T10:00:00Z"
+        state:
+          type: string
+          nullable: true
+          example: "Maharashtra"
+        district:
+          type: string
+          nullable: true
+          example: "Mumbai"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-08-25T10:05:00Z"
+
+    ExtractedEntities:
+      type: object
+      properties:
+        suspect_names:
+          type: array
+          items:
+            type: string
+        amounts_mentioned:
+          type: array
+          items:
+            type: object
+            properties:
+              amount:
+                type: number
+              currency:
+                type: string
+        crypto_addresses:
+          type: array
+          items:
+            type: object
+            properties:
+              address:
+                type: string
+              chain:
+                type: string
+        dates_mentioned:
+          type: array
+          items:
+            type: string
+        fraud_typology:
+          type: string
+          nullable: true
+        summary:
+          type: string
+          nullable: true
+        extractor_used:
+          type: string
+          nullable: true
+        latency_ms:
+          type: number
+          nullable: true
+
+    ComplaintDetail:
+      allOf:
+        - $ref: "#/components/schemas/Complaint"
+        - type: object
+          properties:
+            extracted_entities:
+              $ref: "#/components/schemas/ExtractedEntities"
+              nullable: true
+
+    Case:
+      type: object
+      required: [id, status, opened_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-0000-4000-8000-000000000001"
+        status:
+          $ref: "#/components/schemas/CaseStatus"
+        assigned_investigator:
+          type: string
+          nullable: true
+          example: "inspector_sharma"
+        opened_at:
+          type: string
+          format: date-time
+          example: "2026-08-26T08:00:00Z"
+        closed_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+
+    Alert:
+      type: object
+      required: [id, wallet_id, triggered_by, action, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "d4e5f6a7-1111-4111-b111-111111111111"
+        wallet_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        case_id:
+          type: string
+          format: uuid
+          nullable: true
+          example: "a1b2c3d4-0000-4000-8000-000000000001"
+        triggered_by:
+          $ref: "#/components/schemas/TriggeredBy"
+        action:
+          $ref: "#/components/schemas/AlertAction"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-08-28T07:30:00Z"
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+
+    # ── Auth schemas ──────────────────────────────────────────────────────────
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: "investigator@i4c.gov.in"
+        password:
+          type: string
+          format: password
+          example: "s3cr3t"
+
+    LoginResponse:
+      type: object
+      required: [access_token, refresh_token, role]
+      properties:
+        access_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refresh_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        role:
+          type: string
+          enum: [admin, investigator, compliance_viewer]
+          example: "investigator"
+
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+    RefreshResponse:
+      type: object
+      required: [access_token]
+      properties:
+        access_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+    # ── Request bodies ────────────────────────────────────────────────────────
+    ComplaintCreate:
+      type: object
+      required: [source_platform, filed_at]
+      properties:
+        ncrp_ref:
+          type: string
+          nullable: true
+          example: "NCRP-2026-009123"
+        source_platform:
+          $ref: "#/components/schemas/SourcePlatform"
+        narrative_text:
+          type: string
+          nullable: true
+          example: "Victim transferred ₹2L to wallet after investment scam promise..."
+        fraud_typology:
+          type: string
+          nullable: true
+          example: "investment_fraud"
+        amount_lost:
+          type: number
+          format: float
+          nullable: true
+          example: 200000.0
+        filed_at:
+          type: string
+          format: date-time
+          example: "2026-08-25T10:00:00Z"
+        state:
+          type: string
+          nullable: true
+          example: "Maharashtra"
+        district:
+          type: string
+          nullable: true
+          example: "Mumbai"
+
+    CorrelateRequest:
+      type: object
+      description: "Provide either wallet_id OR (address + chain) — not both."
+      properties:
+        wallet_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        address:
+          type: string
+          example: "1A1zP1eP5QGefi2DMPTfTL5SLmv7Divf2"
+        chain:
+          $ref: "#/components/schemas/Chain"
+
+    CorrelateResponse:
+      type: object
+      required:
+        [
+          correlation_score,
+          linked_complaints,
+          distinct_geographies,
+          total_amount,
+        ]
+      properties:
+        correlation_score:
+          type: number
+          format: float
+          example: 0.97
+        linked_complaints:
+          type: array
+          items:
+            $ref: "#/components/schemas/Complaint"
+        distinct_geographies:
+          type: integer
+          example: 5
+        total_amount:
+          type: number
+          format: float
+          example: 1850000.0
+
+    CheckWalletRequest:
+      type: object
+      required: [address, chain, amount]
+      properties:
+        address:
+          type: string
+          example: "1A1zP1eP5QGefi2DMPTfTL5SLmv7Divf2"
+        chain:
+          $ref: "#/components/schemas/Chain"
+        amount:
+          type: number
+          format: float
+          example: 0.5
+
+    CheckWalletResponse:
+      type: object
+      required: [risk_score, action]
+      properties:
+        risk_score:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.92
+        action:
+          $ref: "#/components/schemas/AlertAction"
+        case_ref:
+          type: string
+          nullable: true
+          example: "NCRP-2026-009123"
+
+    CaseCreate:
+      type: object
+      properties:
+        assigned_investigator:
+          type: string
+          nullable: true
+          example: "inspector_sharma"
+        wallet_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        initial_status:
+          $ref: "#/components/schemas/CaseStatus"
+          default: "new"
+
+    CasePatch:
+      type: object
+      description: "At least one field must be provided."
+      properties:
+        status:
+          $ref: "#/components/schemas/CaseStatus"
+        assigned_investigator:
+          type: string
+          nullable: true
+          example: "inspector_sharma"
+
+    TraceResponse:
+      type: object
+      required: [wallet, path, hops_count, traced_at]
+      properties:
+        wallet:
+          $ref: "#/components/schemas/Wallet"
+        path:
+          type: array
+          items:
+            $ref: "#/components/schemas/Hop"
+        nearest_vasp:
+          type: string
+          nullable: true
+          example: "Binance"
+        hops_count:
+          type: integer
+          example: 3
+        traced_at:
+          type: string
+          format: date-time
+          example: "2026-08-28T13:00:00Z"
+
+    RiskResponse:
+      type: object
+      required: [risk_score, risk_tier, evidence]
+      properties:
+        risk_score:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.87
+        risk_tier:
+          $ref: "#/components/schemas/RiskTier"
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/RiskEvidence"
+          example:
+            - feature_name: "fan_in_count_1h"
+              contribution: 0.31
+              direction: "increases_risk"
+            - feature_name: "cross_victim_correlation_score"
+              contribution: 0.24
+              direction: "increases_risk"
+            - feature_name: "wallet_age_days"
+              contribution: -0.08
+              direction: "decreases_risk"
+
+    HealthResponse:
+      type: object
+      required: [status, version]
+      properties:
+        status:
+          type: string
+          example: "ok"
+        version:
+          type: string
+          example: "0.1.0"
+        services:
+          type: object
+          properties:
+            postgres:
+              type: string
+              enum: [ok, degraded, down]
+              example: "ok"
+            neo4j:
+              type: string
+              enum: [ok, degraded, down]
+              example: "ok"
+            redis:
+              type: string
+              enum: [ok, degraded, down]
+              example: "ok"
+
+  # ── Reusable response objects ─────────────────────────────────────────────
+  responses:
+    Unauthorized:
+      description: Missing or invalid JWT token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+          example:
+            error:
+              code: UNAUTHORIZED
+              message: "Missing or invalid authentication token."
+              details: {}
+    Forbidden:
+      description: Authenticated but insufficient role
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+          example:
+            error:
+              code: FORBIDDEN
+              message: "Your role does not permit this action."
+              details: {}
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    UnprocessableEntity:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+
+# ── Global default auth (JWT bearer) ─────────────────────────────────────────
+security:
+  - bearerAuth: []
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
+paths:
+  # ── Health ─────────────────────────────────────────────────────────────────
+  /health:
+    get:
+      summary: Service health check
+      operationId: health_check
+      security: [] # no auth
+      tags: [health]
+      responses:
+        "200":
+          description: All services healthy (or partial — see `services` sub-object)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: "ok"
+                version: "0.1.0"
+                services:
+                  postgres: "ok"
+                  neo4j: "ok"
+                  redis: "ok"
+
+  # ── Auth ───────────────────────────────────────────────────────────────────
+  /api/v1/auth/login:
+    post:
+      summary: Obtain JWT access + refresh tokens
+      operationId: auth_login
+      security: [] # no auth — this IS the login
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Bad credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              example:
+                error:
+                  code: INVALID_CREDENTIALS
+                  message: "Email or password is incorrect."
+                  details: {}
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /api/v1/auth/refresh:
+    post:
+      summary: Exchange a refresh token for a new access token
+      operationId: auth_refresh
+      security:
+        - bearerAuth: [] # refresh token sent as Bearer
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: New access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefreshResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  # ── Complaints ─────────────────────────────────────────────────────────────
+  /api/v1/complaints:
+    post:
+      summary: Ingest a new complaint (NCRP/SAHYOG/manual)
+      operationId: create_complaint
+      tags: [complaints]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComplaintCreate"
+      responses:
+        "201":
+          description: Complaint created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Complaint"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+    get:
+      summary: List complaints with optional filtering
+      operationId: list_complaints
+      tags: [complaints]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 25
+            minimum: 1
+            maximum: 100
+        - name: state
+          in: query
+          schema:
+            type: string
+          example: "Maharashtra"
+        - name: fraud_typology
+          in: query
+          schema:
+            type: string
+          example: "investment_fraud"
+      responses:
+        "200":
+          description: Paginated complaint list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginationMeta"
+                  - type: object
+                    required: [items]
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Complaint"
+              example:
+                total: 142
+                page: 1
+                page_size: 25
+                items:
+                  - id: "c1a0b2e3-dead-4bad-beef-cafe12345678"
+                    ncrp_ref: "NCRP-2026-009123"
+                    source_platform: "ncrp"
+                    fraud_typology: "investment_fraud"
+                    amount_lost: 200000.0
+                    filed_at: "2026-08-25T10:00:00Z"
+                    state: "Maharashtra"
+                    district: "Mumbai"
+                    created_at: "2026-08-25T10:05:00Z"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/complaints/{id}:
+    get:
+      summary: Get complaint details enriched with local LLM extracted entities
+      operationId: get_complaint
+      tags: [complaints]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Complaint details with read-only NLP/LLM extracted entities
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplaintDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Wallets ────────────────────────────────────────────────────────────────
+  /api/v1/wallets/{address}/trace:
+    get:
+      summary: Trace a wallet's transaction path to nearest VASP
+      operationId: trace_wallet
+      tags: [wallets]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: address
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "1A1zP1eP5QGefi2DMPTfTL5SLmv7Divf2"
+        - name: chain
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/Chain"
+      responses:
+        "200":
+          description: Trace result with hop path
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TraceResponse"
+        "202":
+          description: Trace job enqueued (cold path — check back)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id:
+                    type: string
+                    example: "job-uuid-here"
+                  message:
+                    type: string
+                    example: "Trace job queued. Results available within 5 minutes."
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/wallets/{address}/risk:
+    get:
+      summary: Get risk score + SHAP evidence for a wallet
+      operationId: get_wallet_risk
+      tags: [wallets]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: address
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "1A1zP1eP5QGefi2DMPTfTL5SLmv7Divf2"
+        - name: chain
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/Chain"
+      responses:
+        "200":
+          description: Risk score with SHAP evidence array
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RiskResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Correlate ──────────────────────────────────────────────────────────────
+  /api/v1/correlate:
+    post:
+      summary: Cross-victim correlation — how many complaints share this wallet?
+      operationId: correlate_wallet
+      tags: [correlation]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CorrelateRequest"
+      responses:
+        "200":
+          description: Correlation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CorrelateResponse"
+        "400":
+          description: Must provide wallet_id OR (address + chain)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              example:
+                error:
+                  code: BAD_REQUEST
+                  message: "Provide either wallet_id or (address + chain), not both or neither."
+                  details: {}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Check-wallet (VASP hook — API key auth, NOT JWT) ───────────────────────
+  /check-wallet:
+    post:
+      summary: Real-time risk check for VASP deposit chokepoint (p95 < 200ms)
+      description: |
+        **Auth: X-API-Key header (apiKeyAuth) — NOT a JWT Bearer token.**
+        This endpoint is consumed by external VASP deposit systems, not by the
+        React frontend. The frontend client must never call this route.
+
+        Hot path: reads Redis only (`risk:{chain}:{address}`). 
+        Never touches Postgres or Neo4j synchronously.
+      operationId: check_wallet
+      tags: [vasp]
+      security:
+        - apiKeyAuth: [] # explicitly NOT bearerAuth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckWalletRequest"
+      responses:
+        "200":
+          description: Risk decision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckWalletResponse"
+              example:
+                risk_score: 0.92
+                action: "hold"
+                case_ref: "NCRP-2026-009123"
+        "401":
+          description: Invalid or missing API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              example:
+                error:
+                  code: INVALID_API_KEY
+                  message: "The provided X-API-Key is not recognised."
+                  details: {}
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  # ── Cases ──────────────────────────────────────────────────────────────────
+  /api/v1/cases:
+    post:
+      summary: Create a new investigation case
+      operationId: create_case
+      tags: [cases]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CaseCreate"
+      responses:
+        "201":
+          description: Created case
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Case"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+    get:
+      summary: List cases with optional status filter
+      operationId: list_cases
+      tags: [cases]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/CaseStatus"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 25
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Paginated case list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginationMeta"
+                  - type: object
+                    required: [items]
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Case"
+              example:
+                total: 17
+                page: 1
+                page_size: 25
+                items:
+                  - id: "a1b2c3d4-0000-4000-8000-000000000001"
+                    status: "investigating"
+                    assigned_investigator: "inspector_sharma"
+                    opened_at: "2026-08-26T08:00:00Z"
+                    closed_at: null
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/cases/{id}:
+    get:
+      summary: Get case details by ID
+      operationId: get_case
+      tags: [cases]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Case details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Case"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      summary: Update case status or assigned investigator
+      operationId: update_case
+      tags: [cases]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CasePatch"
+      responses:
+        "200":
+          description: Updated case
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Case"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /api/v1/cases/{id}/report:
+    get:
+      summary: Download PDF case report
+      operationId: get_case_report
+      tags: [cases]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: PDF report binary
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Alerts ────────────────────────────────────────────────────────────────
+  /api/v1/alerts:
+    get:
+      summary: List alerts (polled every 5–10s by the Alerts screen)
+      operationId: list_alerts
+      tags: [alerts]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: resolved
+          in: query
+          schema:
+            type: boolean
+          description: "Filter: true = resolved only, false = open only, omit = all"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 25
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Paginated alert list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginationMeta"
+                  - type: object
+                    required: [items]
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Alert"
+              example:
+                total: 8
+                page: 1
+                page_size: 25
+                items:
+                  - id: "d4e5f6a7-1111-4111-b111-111111111111"
+                    wallet_id: "550e8400-e29b-41d4-a716-446655440000"
+                    case_id: "a1b2c3d4-0000-4000-8000-000000000001"
+                    triggered_by: "check_wallet_hook"
+                    action: "hold"
+                    created_at: "2026-08-28T07:30:00Z"
+                    resolved_at: null
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+tags:
+  - name: health
+    description: Service health
+  - name: auth
+    description: JWT authentication — login and token refresh
+  - name: complaints
+    description: Complaint ingestion and retrieval
+  - name: wallets
+    description: Wallet tracing and risk scoring
+  - name: correlation
+    description: Cross-victim correlation engine (USP 1)
+  - name: vasp
+    description: VASP real-time deposit chokepoint (USP 2) — API-key auth only
+  - name: cases
+    description: Case management and PDF reports
+  - name: alerts
+    description: Alert registry (polled by frontend)

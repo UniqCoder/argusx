@@ -1,0 +1,143 @@
+version: "3.9"
+
+# ── Unigraph — docker-compose.yml ─────────────────────────────────────────────
+# Single command to bring up the full backend stack:
+#   docker-compose up --build
+#
+# Services: postgres | neo4j | redis | backend
+# Frontend dev server runs separately (npm run dev in frontend/).
+# See docker-compose.dev.yml for backend-only mode (frontend dev against real API).
+
+services:
+  # ── PostgreSQL 15 ──────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: unigraph_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: unigraph
+      POSTGRES_USER: unigraph
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_in_prod}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U unigraph -d unigraph"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - unigraph_net
+
+  # ── Neo4j 5 ────────────────────────────────────────────────────────────────
+  neo4j:
+    image: neo4j:5-community
+    container_name: unigraph_neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-changeme_in_prod}
+      # Memory settings suitable for a demo box (tune up for production)
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 1G
+      NEO4J_server_memory_pagecache_size: 512m
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    ports:
+      - "7474:7474" # HTTP browser UI
+      - "7687:7687" # Bolt driver port
+    healthcheck:
+      test: ["CMD", "neo4j", "status"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - unigraph_net
+
+  # ── Redis 7 ────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: unigraph_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - unigraph_net
+
+  # ── Backend (FastAPI) ──────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: unigraph_backend
+    restart: unless-stopped
+    environment:
+      # Database
+      DATABASE_URL: postgresql+asyncpg://unigraph:${POSTGRES_PASSWORD:-changeme_in_prod}@postgres:5432/unigraph
+      # Neo4j
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-changeme_in_prod}
+      # Redis
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      # JWT (MUST be overridden in production — never use the default)
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev_secret_DO_NOT_USE_IN_PROD}
+      JWT_ALGORITHM: HS256
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: 60
+      JWT_REFRESH_TOKEN_EXPIRE_DAYS: 7
+      # VASP API keys (comma-separated)
+      VASP_API_KEYS: ${VASP_API_KEYS:-dev_vasp_key_1}
+      # Explorer API keys
+      TRONSCAN_API_KEY: ${TRONSCAN_API_KEY:-}
+      # Ollama Local LLM (host connection)
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      # App
+      APP_ENV: ${APP_ENV:-development}
+      APP_VERSION: "0.1.0"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount source code for --reload in development
+      - ../backend:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - unigraph_net
+
+volumes:
+  postgres_data:
+  neo4j_data:
+  neo4j_logs:
+  redis_data:
+
+networks:
+  unigraph_net:
+    driver: bridge

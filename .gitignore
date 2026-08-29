@@ -1,0 +1,53 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+.output
+.vinxi
+.tanstack/**
+.nitro
+*.local
+.env
+.env.*
+
+# Local tooling / Lovable workspace (contains credentials)
+.workspace/
+.git.lovable-pointer.bak
+create-repo-and-push.ps1
+init-and-commit.ps1
+tsconfig.tsbuildinfo
+
+# Wrangler / Cloudflare
+.wrangler/
+.dev.vars
+
+# Freebuff
+.freebuff/
+
+# Vite cache
+.vite/
+
+# Vercel build output
+.vercel/
+
+# Backup files
+*.backup.*
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

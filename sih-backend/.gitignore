@@ -1,0 +1,79 @@
+# ── Secrets — NEVER commit these ────────────────────────────────────────────
+.env
+*.env
+!.env.example
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+*.pyo
+
+# ── Virtual envs ─────────────────────────────────────────────────────────────
+venv/
+env/
+ENV/
+.venv/
+.env.local
+
+# ── ML artifacts & Datasets ──────────────────────────────────────────────────
+backend/app/ml/artifacts/*.pkl
+backend/app/ml/artifacts/*.joblib
+backend/app/ml/artifacts/*.model
+data/
+data/raw/
+data/processed/
+*.csv.gz
+*.tar.gz
+
+# ── Alembic auto-generated (only commit intentional migrations) ───────────────
+# Don't add specific revision files here — all are committed intentionally
+
+# ── Testing / coverage ────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.lcov
+scratch/
+backend/scratch/
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# ── Docker ───────────────────────────────────────────────────────────────────
+# Don't ignore docker-compose files — they're config, not secrets
+# Volume data (if mounted locally)
+postgres_data/
+neo4j_data/
+redis_data/
+
+# ── Node (frontend — not backend scope, but good to have in monorepo) ────────
+node_modules/
+.next/
+dist/
+.turbo/

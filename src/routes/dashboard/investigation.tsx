@@ -1,0 +1,943 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  MOCK_CASES,
+  MOCK_TRACE_NODES,
+  MOCK_TRACE_EDGES,
+  type TraceNode,
+  type TraceEdge,
+} from "@/lib/mock-data";
+import { useCaseContext } from "@/store/case-context-store";
+
+export const Route = createFileRoute("/dashboard/investigation")({
+  component: InvestigationWorkspace,
+});
+
+// ─── Colour helpers ───────────────────────────────────────────────────────────
+const NODE_COLOR: Record<TraceNode["type"], string> = {
+  victim: "oklch(0.72 0.024 250)",
+  reported: "oklch(0.64 0.22 18)",
+  intermediate: "oklch(0.83 0.14 205)",
+  bridge: "oklch(0.79 0.15 74)",
+  mixer: "oklch(0.64 0.22 18 / 70%)",
+  exchange: "oklch(0.79 0.15 74)",
+};
+
+// ─── Trace Graph ─────────────────────────────────────────────────────────────
+interface TraceGraphProps {
+  nodes: TraceNode[];
+  edges: TraceEdge[];
+  selectedId: string | null;
+  onSelectNode: (id: string) => void;
+  onSelectEdge: (id: string) => void;
+}
+
+function TraceGraph({
+  nodes,
+  edges,
+  selectedId,
+  onSelectNode,
+  onSelectEdge,
+}: TraceGraphProps) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const particlesRef = useRef<{ id: number; edgeIdx: number; t: number }[]>([]);
+  const animRef = useRef<number | undefined>(undefined);
+  const lastTimeRef = useRef<number>(0);
+  const [, forceUpdate] = useState<number>(0);
+
+  const resolvedEdges = edges.filter((e) => e.resolved);
+
+  useEffect(() => {
+    const tick = (now: number) => {
+      const dt = now - lastTimeRef.current;
+      lastTimeRef.current = now;
+      // Advance particles
+      particlesRef.current = particlesRef.current
+        .map((p) => ({ ...p, t: p.t + dt / 1000 }))
+        .filter((p) => p.t < 1);
+      // Spawn new particle on resolved edges occasionally
+      if (Math.random() < 0.02 && resolvedEdges.length > 0) {
+        const edgeIdx = Math.floor(Math.random() * resolvedEdges.length);
+        particlesRef.current.push({ id: now + Math.random(), edgeIdx, t: 0 });
+      }
+      forceUpdate((n) => n + 1);
+      animRef.current = requestAnimationFrame(tick);
+    };
+    animRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+    };
+  }, [resolvedEdges.length]);
+
+  const getNode = useCallback(
+    (id: string) => nodes.find((n) => n.id === id),
+    [nodes],
+  );
+
+  return (
+    <svg
+      ref={svgRef}
+      viewBox="0 0 980 420"
+      style={{ width: "100%", height: "100%", overflow: "visible" }}
+    >
+      <defs>
+        <filter id="glow-cyan" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="3" result="blur" />
+          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+        <marker
+          id="arrow"
+          markerWidth="6"
+          markerHeight="6"
+          refX="5"
+          refY="3"
+          orient="auto"
+        >
+          <path d="M0 0 L6 3 L0 6 z" fill="oklch(0.83 0.14 205 / 40%)" />
+        </marker>
+      </defs>
+
+      {/* Edges */}
+      {edges.map((edge) => {
+        const a = getNode(edge.from);
+        const b = getNode(edge.to);
+        if (!a || !b) return null;
+        const isSelected = selectedId === edge.id;
+        return (
+          <line
+            key={edge.id}
+            x1={a.x}
+            y1={a.y}
+            x2={b.x}
+            y2={b.y}
+            stroke={
+              !edge.resolved
+                ? "oklch(0.72 0.024 250 / 20%)"
+                : isSelected
+                  ? "var(--color-accent)"
+                  : "oklch(0.83 0.14 205 / 35%)"
+            }
+            strokeWidth={isSelected ? 2 : 1.5}
+            strokeDasharray={edge.resolved ? "none" : "5 4"}
+            markerEnd={edge.resolved ? "url(#arrow)" : undefined}
+            style={{ cursor: "pointer" }}
+            onClick={() => onSelectEdge(edge.id)}
+          />
+        );
+      })}
+
+      {/* Particles along resolved edges */}
+      {particlesRef.current.map((p) => {
+        const edge = resolvedEdges[p.edgeIdx];
+        if (!edge) return null;
+        const a = getNode(edge.from);
+        const b = getNode(edge.to);
+        if (!a || !b) return null;
+        const t = p.t;
+        const cx = a.x + (b.x - a.x) * t;
+        const cy = a.y + (b.y - a.y) * t;
+        return (
+          <circle
+            key={p.id}
+            cx={cx}
+            cy={cy}
+            r={3.5}
+            fill="oklch(0.83 0.14 205)"
+            filter="url(#glow-cyan)"
+            opacity={Math.min(1, 1 - Math.abs(t - 0.5) * 1.6 + 0.2)}
+          />
+        );
+      })}
+
+      {/* Nodes */}
+      {nodes.map((node) => {
+        const color = NODE_COLOR[node.type];
+        const isSelected = selectedId === node.id;
+        const isUnresolved = !node.resolved;
+        return (
+          <g
+            key={node.id}
+            className="ug-node"
+            style={{
+              cursor: "pointer",
+              opacity: isUnresolved ? 0.35 : 1,
+              transform: `translate(${node.x}px, ${node.y}px)`,
+            }}
+            onClick={() => onSelectNode(node.id)}
+          >
+            {/* Outer ring for selected */}
+            {isSelected && (
+              <circle
+                cx={0}
+                cy={0}
+                r={26}
+                fill="none"
+                stroke="var(--color-accent)"
+                strokeWidth={1.5}
+                opacity={0.5}
+                style={{ animation: "none" }}
+              />
+            )}
+            {/* Main node */}
+            <circle
+              cx={0}
+              cy={0}
+              r={18}
+              fill={color.replace(")", " / 12%)")}
+              stroke={color}
+              strokeWidth={1.5}
+              filter={isSelected ? "url(#glow-cyan)" : undefined}
+            />
+            {/* Node icon initial */}
+            <text
+              x={0}
+              y={5}
+              textAnchor="middle"
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 10,
+                fontWeight: 600,
+                fill: color,
+                pointerEvents: "none",
+              }}
+            >
+              {node.type[0]?.toUpperCase()}
+            </text>
+            {/* Label below */}
+            <text
+              x={0}
+              y={34}
+              textAnchor="middle"
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 8,
+                fill: "var(--color-muted-foreground)",
+                letterSpacing: "0.08em",
+                pointerEvents: "none",
+              }}
+            >
+              {node.label}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+// ─── Trace Controls ───────────────────────────────────────────────────────────
+function TraceControls({
+  playing,
+  onPlayPause,
+  speed,
+  onSpeed,
+  progress,
+  onScrub,
+}: {
+  playing: boolean;
+  onPlayPause: () => void;
+  speed: number;
+  onSpeed: (s: number) => void;
+  progress: number;
+  onScrub: (v: number) => void;
+}) {
+  return (
+    <div className="ug-trace-controls">
+      {/* Replay */}
+      <button
+        className="ug-btn-ghost"
+        onClick={() => onScrub(0)}
+        style={{
+          padding: "0.3rem 0.75rem",
+          fontSize: "0.68rem",
+          borderRadius: "2px",
+        }}
+      >
+        ↺ Replay
+      </button>
+
+      {/* Play/Pause */}
+      <button
+        className="ug-btn-ghost"
+        onClick={onPlayPause}
+        style={{
+          padding: "0.3rem 0.9rem",
+          fontSize: "0.68rem",
+          borderRadius: "2px",
+        }}
+      >
+        {playing ? "⏸ Pause" : "▶ Play"}
+      </button>
+
+      {/* Speed selector */}
+      <div style={{ display: "flex", gap: "2px" }}>
+        {[1, 2, 4].map((s) => (
+          <button
+            key={s}
+            onClick={() => onSpeed(s)}
+            style={{
+              padding: "0.25rem 0.6rem",
+              borderRadius: "2px",
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.62rem",
+              background:
+                speed === s ? "oklch(0.83 0.14 205 / 16%)" : "transparent",
+              border:
+                speed === s
+                  ? "1px solid oklch(0.83 0.14 205 / 40%)"
+                  : "1px solid var(--border-strong)",
+              color:
+                speed === s
+                  ? "var(--color-accent)"
+                  : "var(--color-muted-foreground)",
+              cursor: "pointer",
+              transition: "all 0.15s",
+            }}
+          >
+            {s}×
+          </button>
+        ))}
+      </div>
+
+      {/* Timeline scrubber */}
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          gap: "0.75rem",
+        }}
+      >
+        <span
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: "0.6rem",
+            color: "var(--color-muted-foreground)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          Hop {Math.ceil(progress * MOCK_TRACE_NODES.length)} /{" "}
+          {MOCK_TRACE_NODES.length}
+        </span>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.01}
+          value={progress}
+          onChange={(e) => onScrub(parseFloat(e.target.value))}
+          style={{
+            flex: 1,
+            accentColor: "var(--color-accent)",
+            height: 3,
+            cursor: "pointer",
+          }}
+        />
+      </div>
+
+      {/* Confidence */}
+      <div
+        className="ug-confidence"
+        style={{ flexDirection: "row", alignItems: "center", gap: "0.5rem" }}
+      >
+        <span className="ug-confidence__label">Confidence</span>
+        <span className="ug-confidence__value" style={{ fontSize: "1.1rem" }}>
+          {Math.round(72 + progress * 22)}%
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Intelligence Inspector ───────────────────────────────────────────────────
+function IntelligenceInspector({
+  selectedId,
+  nodes,
+  edges,
+}: {
+  selectedId: string | null;
+  nodes: TraceNode[];
+  edges: TraceEdge[];
+}) {
+  const node = nodes.find((n) => n.id === selectedId);
+  const edge = edges.find((e) => e.id === selectedId);
+
+  if (!selectedId) {
+    return (
+      <div style={{ padding: "1.25rem", textAlign: "center" }}>
+        <p
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: "0.62rem",
+            letterSpacing: "0.2em",
+            textTransform: "uppercase",
+            color: "var(--color-muted-foreground)",
+            marginBottom: "0.5rem",
+          }}
+        >
+          Intelligence Inspector
+        </p>
+        <p
+          style={{
+            fontSize: "0.78rem",
+            color: "var(--color-muted-foreground)",
+            lineHeight: 1.6,
+          }}
+        >
+          Select a wallet node or connection edge to inspect evidence.
+        </p>
+      </div>
+    );
+  }
+
+  if (node) {
+    const color = NODE_COLOR[node.type];
+    return (
+      <div style={{ padding: "1.25rem" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.6rem",
+            marginBottom: "1rem",
+          }}
+        >
+          <div
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: "999px",
+              background: color,
+            }}
+          />
+          <p
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.62rem",
+              letterSpacing: "0.22em",
+              textTransform: "uppercase",
+              color,
+            }}
+          >
+            {node.type}
+          </p>
+        </div>
+        <h3
+          style={{
+            fontSize: "0.92rem",
+            fontWeight: 700,
+            color: "var(--color-foreground)",
+            marginBottom: "1rem",
+            letterSpacing: "-0.02em",
+          }}
+        >
+          {node.label}
+        </h3>
+
+        <div>
+          {[
+            { k: "Address", v: node.address },
+            { k: "Blockchain", v: node.blockchain },
+            { k: "Amount", v: node.amount ?? "—" },
+            { k: "Status", v: node.resolved ? "Resolved" : "Unresolved" },
+          ].map(({ k, v }) => (
+            <div key={k} className="ug-data-row">
+              <span className="ug-data-row__key">{k}</span>
+              <span
+                className="ug-data-row__value"
+                style={{
+                  fontFamily: k === "Address" ? "var(--font-mono)" : undefined,
+                }}
+              >
+                {v}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div className="ug-divider" />
+
+        {/* Risk score */}
+        <p className="ug-section-title">Risk Score</p>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            marginBottom: "0.75rem",
+          }}
+        >
+          <span
+            style={{
+              fontSize: "1.8rem",
+              fontWeight: 700,
+              letterSpacing: "-0.04em",
+              color:
+                node.riskScore > 70
+                  ? "var(--color-signal)"
+                  : node.riskScore > 40
+                    ? "var(--color-primary)"
+                    : "var(--color-accent)",
+            }}
+          >
+            {node.riskScore}
+          </span>
+          <span
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.62rem",
+              color: "var(--color-muted-foreground)",
+            }}
+          >
+            / 100
+          </span>
+        </div>
+        <div className="ug-risk-bar">
+          <div
+            className="ug-risk-bar__fill"
+            style={{
+              width: `${node.riskScore}%`,
+              background:
+                node.riskScore > 70
+                  ? "var(--color-signal)"
+                  : node.riskScore > 40
+                    ? "var(--color-primary)"
+                    : "var(--color-accent)",
+            }}
+          />
+        </div>
+
+        <div className="ug-divider" />
+
+        {/* Related complaints placeholder */}
+        <p className="ug-section-title">Network Signal</p>
+        <div
+          style={{
+            padding: "0.75rem",
+            background: "oklch(0.83 0.14 205 / 6%)",
+            border: "1px solid oklch(0.83 0.14 205 / 20%)",
+            borderRadius: "2px",
+          }}
+        >
+          <p
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.65rem",
+              color: "var(--color-accent)",
+              letterSpacing: "0.1em",
+            }}
+          >
+            {node.type === "reported"
+              ? "4 independent complaints linked"
+              : "No direct signal"}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (edge) {
+    const fromNode = nodes.find((n) => n.id === edge.from);
+    const toNode = nodes.find((n) => n.id === edge.to);
+    return (
+      <div style={{ padding: "1.25rem" }}>
+        <p
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: "0.62rem",
+            letterSpacing: "0.22em",
+            textTransform: "uppercase",
+            color: "var(--color-accent)",
+            marginBottom: "1rem",
+          }}
+        >
+          Connection Evidence
+        </p>
+
+        <div>
+          {[
+            { k: "From", v: fromNode?.label ?? edge.from },
+            { k: "To", v: toNode?.label ?? edge.to },
+            { k: "Method", v: edge.method },
+            { k: "Amount", v: edge.amount },
+            { k: "Heuristic", v: edge.heuristic },
+            { k: "Data Source", v: edge.dataSource },
+            { k: "Confidence", v: `${edge.confidence}%` },
+            { k: "Timestamp", v: edge.timestamp || "Unresolved" },
+          ].map(({ k, v }) => (
+            <div key={k} className="ug-data-row">
+              <span className="ug-data-row__key">{k}</span>
+              <span className="ug-data-row__value">{v}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="ug-divider" />
+
+        <p className="ug-section-title">Confidence</p>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            marginBottom: "0.5rem",
+          }}
+        >
+          <span
+            style={{
+              fontSize: "1.8rem",
+              fontWeight: 700,
+              letterSpacing: "-0.04em",
+              color: "var(--color-accent)",
+            }}
+          >
+            {edge.confidence}%
+          </span>
+        </div>
+        <div className="ug-risk-bar">
+          <div
+            className="ug-risk-bar__fill"
+            style={{
+              width: `${edge.confidence}%`,
+              background: "var(--color-accent)",
+            }}
+          />
+        </div>
+
+        <div
+          style={{
+            marginTop: "1rem",
+            padding: "0.75rem",
+            background: edge.resolved
+              ? "oklch(0.83 0.14 205 / 6%)"
+              : "oklch(0.64 0.22 18 / 6%)",
+            border: `1px solid ${edge.resolved ? "oklch(0.83 0.14 205 / 20%)" : "oklch(0.64 0.22 18 / 20%)"}`,
+            borderRadius: "2px",
+          }}
+        >
+          <p
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.65rem",
+              color: edge.resolved
+                ? "var(--color-accent)"
+                : "var(--color-signal)",
+              letterSpacing: "0.1em",
+            }}
+          >
+            {edge.resolved
+              ? "✓ Resolved connection"
+              : "⚠ Unresolved — awaiting on-chain confirmation"}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+// ─── Investigation Workspace ──────────────────────────────────────────────────
+function InvestigationWorkspace() {
+  const { activeCaseId, activeWallet, activeChain, hasActiveCase } =
+    useCaseContext();
+
+  // Fallback to first mock case if no case is selected
+  const caseData = hasActiveCase()
+    ? MOCK_CASES.find((c) => c.id === activeCaseId) || MOCK_CASES[0]!
+    : MOCK_CASES[0]!;
+
+  const [selectedId, setSelectedId] = useState<string | null>("n2");
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState(1);
+  const [progress, setProgress] = useState(0.6);
+
+  // Progress auto-advance when playing
+  useEffect(() => {
+    if (!playing) return;
+    const interval = setInterval(() => {
+      setProgress((p) => {
+        if (p >= 1) {
+          setPlaying(false);
+          return 1;
+        }
+        return Math.min(1, p + 0.003 * speed);
+      });
+    }, 50);
+    return () => clearInterval(interval);
+  }, [playing, speed]);
+
+  // How many nodes are "revealed" based on progress
+  const revealedCount = Math.ceil(progress * MOCK_TRACE_NODES.length);
+  const visibleNodes = MOCK_TRACE_NODES.slice(0, revealedCount).map((n) => ({
+    ...n,
+    resolved: n.resolved && MOCK_TRACE_NODES.indexOf(n) < revealedCount,
+  }));
+  const visibleEdges = MOCK_TRACE_EDGES.map((e) => {
+    const fromIdx = MOCK_TRACE_NODES.findIndex((n) => n.id === e.from);
+    const toIdx = MOCK_TRACE_NODES.findIndex((n) => n.id === e.to);
+    return {
+      ...e,
+      resolved: e.resolved && fromIdx < revealedCount && toIdx < revealedCount,
+    };
+  });
+
+  const statusColor: Record<string, string> = {
+    "live-trace": "var(--color-accent)",
+    "network-signal": "var(--color-primary)",
+    "vasp-identified": "var(--color-primary)",
+    critical: "var(--color-signal)",
+    "evidence-ready": "var(--color-accent)",
+    closed: "var(--color-muted-foreground)",
+  };
+
+  return (
+    <div
+      className="ug-workspace"
+      style={{ margin: "-2rem -2.25rem", height: "calc(100vh - 48px)" }}
+    >
+      {/* ── Left: Case Context ── */}
+      <div className="ug-workspace__left">
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "1rem",
+          }}
+        >
+          <p className="ug-section-title">Case Context</p>
+          {hasActiveCase() && (
+            <span
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: "0.6rem",
+                color: "var(--color-accent)",
+                opacity: 0.8,
+              }}
+            >
+              Active
+            </span>
+          )}
+        </div>
+
+        <div style={{ marginBottom: "1rem" }}>
+          {[
+            { k: "Case ID", v: caseData.id },
+            { k: "Fraud Type", v: caseData.fraudType },
+            { k: "Reported Wallet", v: caseData.reportedWallet },
+            { k: "Blockchain", v: caseData.blockchain },
+            { k: "Victims", v: String(caseData.victimCount) },
+          ].map(({ k, v }) => (
+            <div key={k} className="ug-data-row">
+              <span className="ug-data-row__key">{k}</span>
+              <span
+                className="ug-data-row__value"
+                style={{
+                  fontFamily:
+                    k === "Case ID" || k === "Reported Wallet"
+                      ? "var(--font-mono)"
+                      : undefined,
+                  fontSize: "0.74rem",
+                }}
+              >
+                {v}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Status badge */}
+        <div style={{ marginBottom: "1.25rem" }}>
+          <span
+            className="ug-badge"
+            style={{
+              background: `${statusColor[caseData.traceStatus] ?? "var(--color-muted-foreground)"}1a`,
+              color: statusColor[caseData.traceStatus],
+              border: `1px solid ${statusColor[caseData.traceStatus] ?? "var(--color-muted-foreground)"}50`,
+            }}
+          >
+            <span
+              style={{
+                width: 5,
+                height: 5,
+                borderRadius: "999px",
+                background: "currentColor",
+              }}
+            />
+            {caseData.traceStatus.replace("-", " ").toUpperCase()}
+          </span>
+        </div>
+
+        <div className="ug-divider" />
+
+        {/* Trace confidence */}
+        <div className="ug-confidence">
+          <span className="ug-confidence__label">Trace Confidence</span>
+          <span className="ug-confidence__value">
+            {Math.round(72 + progress * 22)}%
+          </span>
+        </div>
+        <div className="ug-risk-bar" style={{ marginTop: "0.5rem" }}>
+          <div
+            className="ug-risk-bar__fill"
+            style={{
+              width: `${72 + progress * 22}%`,
+              background: "var(--color-accent)",
+            }}
+          />
+        </div>
+        {progress > 0.7 && (
+          <p
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.62rem",
+              color: "var(--color-accent)",
+              marginTop: "0.5rem",
+              lineHeight: 1.5,
+            }}
+          >
+            ↑ Confidence increased. Bridge event matched across chains.
+          </p>
+        )}
+
+        <div className="ug-divider" />
+
+        {/* Risk */}
+        <p className="ug-section-title">Risk Score</p>
+        <div
+          style={{
+            display: "flex",
+            gap: "0.5rem",
+            alignItems: "center",
+            marginBottom: "0.5rem",
+          }}
+        >
+          <span
+            style={{
+              fontSize: "1.8rem",
+              fontWeight: 700,
+              color: "var(--color-signal)",
+              letterSpacing: "-0.04em",
+            }}
+          >
+            {caseData.riskScore}
+          </span>
+          <span
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.62rem",
+              color: "var(--color-muted-foreground)",
+            }}
+          >
+            / 100
+          </span>
+        </div>
+        <div className="ug-risk-bar">
+          <div
+            className="ug-risk-bar__fill"
+            style={{
+              width: `${caseData.riskScore}%`,
+              background: "var(--color-signal)",
+            }}
+          />
+        </div>
+
+        <div className="ug-divider" />
+
+        <p className="ug-section-title">Network Signal</p>
+        <div
+          style={{
+            padding: "0.75rem",
+            background: "oklch(0.64 0.22 18 / 8%)",
+            border: "1px solid oklch(0.64 0.22 18 / 25%)",
+            borderRadius: "2px",
+          }}
+        >
+          <p
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.62rem",
+              letterSpacing: "0.12em",
+              color: "var(--color-signal)",
+              marginBottom: "0.25rem",
+            }}
+          >
+            ● HIGH
+          </p>
+          <p
+            style={{
+              fontSize: "0.74rem",
+              color: "var(--color-muted-foreground)",
+              lineHeight: 1.5,
+            }}
+          >
+            4 independent victim complaints share this wallet cluster.
+          </p>
+        </div>
+      </div>
+
+      {/* ── Center: Live Money Trail ── */}
+      <div className="ug-workspace__center">
+        <div
+          style={{
+            padding: "0.75rem 1.25rem",
+            borderBottom: "1px solid var(--border-strong)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <p className="ug-section-title" style={{ marginBottom: 0 }}>
+            Live Money Trail
+          </p>
+          <div className="ug-system-live" style={{ fontSize: "0.58rem" }}>
+            <span className="ug-system-live__dot" />
+            {playing ? "TRACING" : "PAUSED"}
+          </div>
+        </div>
+
+        <div className="ug-trace-canvas">
+          <TraceGraph
+            nodes={visibleNodes}
+            edges={visibleEdges}
+            selectedId={selectedId}
+            onSelectNode={setSelectedId}
+            onSelectEdge={setSelectedId}
+          />
+        </div>
+
+        <TraceControls
+          playing={playing}
+          onPlayPause={() => setPlaying((v) => !v)}
+          speed={speed}
+          onSpeed={setSpeed}
+          progress={progress}
+          onScrub={(v) => {
+            setProgress(v);
+            setPlaying(false);
+          }}
+        />
+      </div>
+
+      {/* ── Right: Intelligence Inspector ── */}
+      <div className="ug-workspace__right" style={{ padding: 0 }}>
+        <div
+          style={{
+            padding: "0.75rem 1.25rem",
+            borderBottom: "1px solid var(--border-strong)",
+          }}
+        >
+          <p className="ug-section-title" style={{ marginBottom: 0 }}>
+            Intelligence Inspector
+          </p>
+        </div>
+        <IntelligenceInspector
+          selectedId={selectedId}
+          nodes={visibleNodes}
+          edges={visibleEdges}
+        />
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,3 @@
+# ML model artifacts — not committed to git (large binaries)
+# Use DVC, MLflow, or artifact store to version and share these files.
+# See .gitignore for the exclusion pattern.
