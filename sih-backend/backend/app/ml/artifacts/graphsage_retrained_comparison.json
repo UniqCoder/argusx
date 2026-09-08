@@ -1,0 +1,100 @@
+{
+  "model": "retrained_on_processed_splits",
+  "feature_counts": {
+    "baseline": 72,
+    "graphsage_embedding": 88
+  },
+  "split_rows": {
+    "train": 174163,
+    "val": 23841,
+    "test": 96428,
+    "graph_nodes_btc": 265354
+  },
+  "baseline": {
+    "validation_threshold": 0.9,
+    "validation": {
+      "threshold": 0.9,
+      "precision": 0.7452541334966319,
+      "recall": 0.5762310606060606,
+      "fpr": 0.01914492153343458,
+      "tp": 1217,
+      "fp": 416,
+      "tn": 21313,
+      "fn": 895
+    },
+    "combined_test": {
+      "rows": 96428,
+      "threshold": 0.9,
+      "precision": 0.5119515885022693,
+      "recall": 0.32130649449297377,
+      "fpr": 0.01769377591540335,
+      "auc_pr": 0.4013618359938829,
+      "auc_roc": 0.851073694485928,
+      "tp": 1692,
+      "fp": 1613,
+      "tn": 89549,
+      "fn": 3574
+    },
+    "btc_test": {
+      "rows": 94950,
+      "threshold": 0.9,
+      "precision": 0.47946977044940187,
+      "recall": 0.30032401782098017,
+      "fpr": 0.017886504021685998,
+      "auc_pr": 0.3619895522476312,
+      "auc_roc": 0.8431625434506218,
+      "tp": 1483,
+      "fp": 1610,
+      "tn": 88402,
+      "fn": 3455
+    }
+  },
+  "graphsage_embedding": {
+    "validation_threshold": 0.92,
+    "validation": {
+      "threshold": 0.92,
+      "precision": 0.8118081180811808,
+      "recall": 0.625,
+      "fpr": 0.014082562474112936,
+      "tp": 1320,
+      "fp": 306,
+      "tn": 21423,
+      "fn": 792
+    },
+    "combined_test": {
+      "rows": 96428,
+      "threshold": 0.92,
+      "precision": 0.5562416107382551,
+      "recall": 0.39346752753513103,
+      "fpr": 0.018132555231346395,
+      "auc_pr": 0.4542726621470194,
+      "auc_roc": 0.8617004779069991,
+      "tp": 2072,
+      "fp": 1653,
+      "tn": 89509,
+      "fn": 3194
+    },
+    "btc_test": {
+      "rows": 94950,
+      "threshold": 0.92,
+      "precision": 0.5319148936170213,
+      "recall": 0.37970838396111783,
+      "fpr": 0.018330889214771363,
+      "auc_pr": 0.42735843447659166,
+      "auc_roc": 0.8548562286560344,
+      "tp": 1875,
+      "fp": 1650,
+      "tn": 88362,
+      "fn": 3063
+    }
+  },
+  "graph_nodes": {
+    "btc_labeled_nodes": 265354,
+    "train_nodes": 148038,
+    "val_nodes": 22366,
+    "test_nodes": 94950,
+    "edges": 1118222,
+    "train_edges": 481298
+  },
+  "processed_dir": "C:\\vs code\\SIH\\data\\processed"
+}

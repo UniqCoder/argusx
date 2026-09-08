@@ -104,6 +104,17 @@ async def get_case_by_id(db: AsyncSession, case_id: uuid.UUID) -> Optional[Case]
     return res.scalar_one_or_none()
 
 
+async def get_case_wallets(db: AsyncSession, case_id: uuid.UUID) -> List[Wallet]:
+    """Return the wallets explicitly linked to a case."""
+    stmt = (
+        select(Wallet)
+        .join(CaseWallet, CaseWallet.wallet_id == Wallet.id)
+        .where(CaseWallet.case_id == case_id)
+    )
+    res = await db.execute(stmt)
+    return list(res.scalars().all())
+
+
 async def list_cases(
     db: AsyncSession,
     status_filter: Optional[CaseStatus] = None,

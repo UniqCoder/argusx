@@ -13,14 +13,15 @@ Neo4j schema (PRD §9.4):
   (:Wallet)-[:BELONGS_TO]->(:Cluster)
   (:Wallet)-[:DEPOSITS_TO]->(:VASP)
 """
-import logging
+import structlog
+from time import perf_counter
 from typing import Any
 
 from neo4j import AsyncDriver, AsyncGraphDatabase
 
 from app.core.config import get_settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 settings = get_settings()
 
 _driver: AsyncDriver | None = None
@@ -51,9 +52,34 @@ async def run_query(cypher: str, parameters: dict[str, Any] | None = None) -> li
     """
     Execute a read Cypher query and return results as a list of dicts.
     Phase 3 will add write queries for graph building.
+
+    Audit OBSERVABILITY (Group 1): every executed Cypher query is logged with
+    its provenance (queried address), row count, and latency — the "did Neo4j
+    return real data vs. empty/skip" signal. The full returned records are
+    logged only at DEBUG level (Group 2, gated).
     """
     driver = await get_driver()
+    params = parameters or {}
+    start = perf_counter()
     async with driver.session() as session:
-        result = await session.run(cypher, parameters or {})
+        result = await session.run(cypher, params)
         records = await result.data()
+    elapsed_ms = (perf_counter() - start) * 1000.0
+
+    query_tag = cypher[:60].replace("\n", " ").strip()
+    if len(cypher) >= 15:
+        logger.info(
+            "neo4j_query",
+            query_id=query_tag,
+            param_address=params.get("address"),
+            row_count=len(records),
+            elapsed_ms=round(elapsed_ms, 2),
+        )
+        if records:
+            logger.debug(
+                "neo4j_query_records",
+                query_id=query_tag,
+                param_address=params.get("address"),
+                records=records,
+            )
     return records

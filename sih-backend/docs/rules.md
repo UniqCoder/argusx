@@ -1,7 +1,6 @@
-# Rules — Unigraph Backend (for AI coding agents, e.g. Antigravity)
+# Rules — Argus Backend (for AI coding agents, e.g. Antigravity)
 
 ## Engineering rules — non-negotiable
-
 1. `contracts/openapi.yaml` is the source of truth. Never let a request/response shape drift from it — update the contract first, flag the change, then write code.
 2. Strict layering: `routers/` (HTTP only) → `services/` (business logic) → `models/` + `graph/` + `nlp/` + `ml/` (data/ML access). Routers never touch SQLAlchemy or Neo4j directly.
 3. `/check-wallet` is Redis-only in the hot path. No Postgres/Neo4j call may block that response — anything heavier goes through Celery, off the request path. Target: p95 < 200ms.
@@ -14,12 +13,10 @@
 10. An endpoint is only "done" once it's been verified via `/docs` or `curl` — not on the strength of code compiling.
 
 ## Working agreement with the Frontend Owner
-
 - Any endpoint shape change = a conversation first, a contract edit second, code third.
 - A silent shape change that breaks a frontend assumption is treated as a bug, not a refactor.
 
 ## Agent behavior rules (for Antigravity specifically)
-
 1. Work one phase at a time, in the order given in `implementation.md`. Don't start Phase 4 ML work before Phase 0–1 are done — later phases depend on tables and services earlier phases create.
 2. Before starting a task, check `progress.md`. If it's already `Done`, don't redo it — ask before overwriting.
 3. After finishing a task, update `progress.md` yourself (status, date, one-line note) as part of that same turn — don't leave it for the human to do.

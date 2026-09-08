@@ -6,11 +6,11 @@ LLM is offline, times out, or produces malformed JSON.
 """
 import re
 from typing import Any, Dict, List, Optional
-import logging
+import structlog
 
 from app.schemas.common import Chain
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Regular expressions for crypto wallet addresses
 BTC_BECH32_PATTERN = r"\b(bc1[a-z0-9]{38,59}|tb1[a-z0-9]{38,59})\b"

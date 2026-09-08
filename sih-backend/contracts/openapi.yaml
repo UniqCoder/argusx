@@ -1,18 +1,18 @@
 openapi: "3.0.3"
 info:
-  title: Unigraph — Real-Time Crypto Fraud Attribution API
+  title: Argus — Real-Time Crypto Fraud Attribution API
   description: |
-    Backend API for Unigraph (SIH26183 — MHA/I4C).
-
+    Backend API for Argus (SIH26183 — MHA/I4C).
+    
     **Auth schemes:**
     - `bearerAuth` (JWT): all `/api/v1/...` routes except `/api/v1/auth/login` and `/api/v1/auth/refresh`
     - `apiKeyAuth` (X-API-Key header): `/check-wallet` only — used by external VASPs, never by the frontend JWT client
-
+    
     **Error envelope** (all failures, every endpoint):
     ```json
     { "error": { "code": "string", "message": "string", "details": {} } }
     ```
-
+    
     **Enums** are defined in `contracts/entities.md` and must never be extended inline.
   version: "0.1.0"
   contact:
@@ -36,6 +36,7 @@ components:
 
   # ── Shared schemas ──────────────────────────────────────────────────────────
   schemas:
+
     # ── Enums (closed — see entities.md) ─────────────────────────────────────
     RiskTier:
       type: string
@@ -432,13 +433,7 @@ components:
 
     CorrelateResponse:
       type: object
-      required:
-        [
-          correlation_score,
-          linked_complaints,
-          distinct_geographies,
-          total_amount,
-        ]
+      required: [correlation_score, linked_complaints, distinct_geographies, total_amount]
       properties:
         correlation_score:
           type: number
@@ -632,12 +627,13 @@ security:
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 paths:
+
   # ── Health ─────────────────────────────────────────────────────────────────
   /health:
     get:
       summary: Service health check
       operationId: health_check
-      security: [] # no auth
+      security: []   # no auth
       tags: [health]
       responses:
         "200":
@@ -659,7 +655,7 @@ paths:
     post:
       summary: Obtain JWT access + refresh tokens
       operationId: auth_login
-      security: [] # no auth — this IS the login
+      security: []   # no auth — this IS the login
       tags: [auth]
       requestBody:
         required: true
@@ -693,7 +689,7 @@ paths:
       summary: Exchange a refresh token for a new access token
       operationId: auth_refresh
       security:
-        - bearerAuth: [] # refresh token sent as Bearer
+        - bearerAuth: []   # refresh token sent as Bearer
       tags: [auth]
       requestBody:
         required: true
@@ -958,13 +954,13 @@ paths:
         **Auth: X-API-Key header (apiKeyAuth) — NOT a JWT Bearer token.**
         This endpoint is consumed by external VASP deposit systems, not by the
         React frontend. The frontend client must never call this route.
-
+        
         Hot path: reads Redis only (`risk:{chain}:{address}`). 
         Never touches Postgres or Neo4j synchronously.
       operationId: check_wallet
       tags: [vasp]
       security:
-        - apiKeyAuth: [] # explicitly NOT bearerAuth
+        - apiKeyAuth: []   # explicitly NOT bearerAuth
       requestBody:
         required: true
         content:

@@ -295,7 +295,7 @@ async def seed_database_async(dataset: dict[str, Any]) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Synthetic NCRP Complaint Data Generator for Unigraph")
+    parser = argparse.ArgumentParser(description="Synthetic NCRP Complaint Data Generator for Argus")
     parser.add_argument("--output", "-o", type=str, help="Output JSON filepath to save dataset")
     parser.add_argument("--seed-db", action="store_true", help="Seed database directly using current app settings")
     parser.add_argument("--count", type=int, default=35, help="Number of single-victim complaints to generate")

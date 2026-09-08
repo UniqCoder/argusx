@@ -49,7 +49,10 @@ async def create_case(
         wallet_ids=payload.wallet_ids,
         initial_status=payload.initial_status,
     )
-    return CaseRead.model_validate(case)
+    return CaseRead.model_validate({
+        **case.__dict__,
+        "wallets": await case_service.get_case_wallets(db, case.id),
+    })
 
 
 @router.get(
@@ -76,11 +79,17 @@ async def list_cases(
         page=page,
         page_size=page_size,
     )
+    items = []
+    for case in cases:
+        items.append(CaseRead.model_validate({
+            **case.__dict__,
+            "wallets": await case_service.get_case_wallets(db, case.id),
+        }))
     return PaginatedResponse(
         total=total,
         page=page,
         page_size=page_size,
-        items=[CaseRead.model_validate(c) for c in cases],
+        items=items,
     )
 
 
@@ -120,7 +129,10 @@ async def get_case(
         entity="case",
         entity_id=case.id,
     )
-    return CaseRead.model_validate(case)
+    return CaseRead.model_validate({
+        **case.__dict__,
+        "wallets": await case_service.get_case_wallets(db, case.id),
+    })
 
 
 @router.patch(
@@ -152,7 +164,10 @@ async def update_case(
         entity="case",
         entity_id=updated_case.id,
     )
-    return CaseRead.model_validate(updated_case)
+    return CaseRead.model_validate({
+        **updated_case.__dict__,
+        "wallets": await case_service.get_case_wallets(db, updated_case.id),
+    })
 
 
 @router.get(
@@ -179,7 +194,7 @@ async def get_case_report(
     ML risk scores, SHAP evidence, multi-hop trace paths, and NCRP complaints.
     """
     pdf_bytes = await report_service.generate_case_pdf_report(db, id)
-    filename = f"unigraph_case_{str(id)[:8]}.pdf"
+    filename = f"argus_case_{str(id)[:8]}.pdf"
 
     await audit_service.record_audit_log(
         db=db,

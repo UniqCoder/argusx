@@ -23,11 +23,15 @@ redis==5.0.4
 celery==5.4.0
 
 # ML (Phase 4 — installed now so docker image doesn't change mid-project)
+torch==2.10.0
+torch-geometric==2.8.0.post1
 xgboost==2.0.3
 lightgbm==4.3.0
 scikit-learn==1.5.0
 shap==0.45.1
-numpy>=2.1.0  # 2.x has Python 3.13 wheels; 1.26.x does not
+optuna==4.9.0
+imbalanced-learn==0.14.2
+numpy>=1.26.4,<2.0.0  # SHAP 0.45.1 C-extensions require NumPy 1.x ABI
 pandas==2.2.2
 
 # NLP (Phase 6 stretch)

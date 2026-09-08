@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     trongrid_api_key: str = ""
     tronscan_api_key: str = ""
 
+    # ── OSINT sources ──────────────────────────────────────────────────────
+    bitcoinabuse_api_key: str = ""
+
     # ── Ollama (Phase 6) ──────────────────────────────────────────────────────
     ollama_base_url: str = "http://localhost:11434"
 

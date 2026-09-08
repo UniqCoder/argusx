@@ -25,6 +25,7 @@ ON MATCH SET w_to.last_seen = datetime($timestamp)
 
 MERGE (tx:Transaction {tx_hash: $tx_hash})
 ON CREATE SET tx.amount = $amount, tx.timestamp = datetime($timestamp), tx.chain = $chain
+ON MATCH SET tx.amount = $amount, tx.timestamp = datetime($timestamp), tx.chain = $chain
 
 MERGE (w_from)-[:SENT]->(tx)
 MERGE (tx)-[:RECEIVED_BY]->(w_to)

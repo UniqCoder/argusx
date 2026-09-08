@@ -12,7 +12,7 @@ import httpx
 
 from app.core.config import get_settings
 from app.schemas.common import Chain
-from app.services.explorers.base import BlockchainExplorer, RawTx
+from app.services.explorers.base import BlockchainExplorer, ExplorerUnavailableError, RawTx
 from app.services.explorers.known_vasps import lookup_known_vasp
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ class TronExplorer(BlockchainExplorer):
 
         headers = {
             "Accept": "application/json",
-            "User-Agent": "Unigraph-Forensics/1.0",
+            "User-Agent": "Argus-Forensics/1.0",
         }
         if self.api_key:
             headers["TRON-PRO-API-KEY"] = self.api_key
@@ -57,13 +57,16 @@ class TronExplorer(BlockchainExplorer):
                     return []
                 elif resp.status_code == 429:
                     logger.warning("tron_explorer_rate_limited", extra={"address": addr})
-                    return []
+                    raise ExplorerUnavailableError(f"TRON explorer rate-limited for {addr}")
                 else:
                     logger.warning("tronscan_returned_non_200", extra={"status": resp.status_code, "text": resp.text[:200]})
+                    raise ExplorerUnavailableError(f"TRON explorer returned {resp.status_code} for {addr}")
+        except ExplorerUnavailableError:
+            raise
         except Exception as e:
             logger.warning("tron_explorer_request_failed", extra={"error": str(e), "address": addr})
 
-        return []
+        raise ExplorerUnavailableError(f"TRON explorer failed for {addr}")
 
     def _parse_tronscan_txs(self, target_address: str, tx_list: list, limit: int) -> List[RawTx]:
         results: List[RawTx] = []
@@ -82,24 +85,41 @@ class TronExplorer(BlockchainExplorer):
             # If toAddress is missing, check contract/trigger_info parameter
             trigger_info = item.get("trigger_info") or {}
             params = trigger_info.get("parameter") or {}
-            if not to_addr:
-                to_addr = params.get("to", "")
+            contract_data = item.get("contractData") or {}
+            if params.get("to"):
+                to_addr = params["to"]
+            elif contract_data.get("to_address"):
+                to_addr = contract_data["to_address"]
 
-            # Parse amount
-            raw_amt = float(item.get("amount", 0) or 0)
             token_info = item.get("tokenInfo") or {}
-            decimals = int(token_info.get("tokenDecimal", 6) or 6)
+            try:
+                net_fee_sun = float(item.get("net_fee") or item.get("netFee") or 0)
+                energy_fee_sun = float(item.get("energy_fee") or item.get("energyFee") or 0)
+                bandwidth_used = float(item.get("net_usage") or item.get("netUsage") or 0)
+                energy_used = float(item.get("energy_usage") or item.get("energyUsage") or 0)
+            except (TypeError, ValueError):
+                net_fee_sun = energy_fee_sun = bandwidth_used = energy_used = 0.0
+            try:
+                decimals = max(0, int(token_info.get("tokenDecimal", 6) or 6))
+            except (ValueError, TypeError):
+                decimals = 6
 
-            if raw_amt > 0:
-                amount = round(raw_amt / (10 ** decimals), 6)
-            elif "value" in params:
+            # Tronscan reports contract transfers with top-level amount=0;
+            # the actual value is in trigger_info.parameter.value or contractData.amount.
+            amount = 0.0
+            for raw_amount in (
+                item.get("amount"),
+                contract_data.get("amount"),
+                params.get("value"),
+                params.get("amount"),
+            ):
                 try:
-                    param_val = float(params["value"])
-                    amount = round(param_val / (10 ** decimals), 6)
-                except (ValueError, TypeError):
-                    amount = 0.0
-            else:
-                amount = 0.0
+                    parsed_amount = float(raw_amount or 0)
+                    if 0 < parsed_amount < 1e15:
+                        amount = round(parsed_amount / (10 ** decimals), 6)
+                        break
+                except (ValueError, TypeError, OverflowError):
+                    continue
 
             # Known VASP attribution
             vasp_from = lookup_known_vasp(from_addr)
@@ -119,6 +139,9 @@ class TronExplorer(BlockchainExplorer):
                     chain=Chain.TRON,
                     timestamp=ts,
                     vasp_tag=vasp_name,
+                        fee_native=(net_fee_sun + energy_fee_sun) / 1e6 if net_fee_sun or energy_fee_sun else None,
+                        bandwidth_used=bandwidth_used if bandwidth_used else None,
+                        energy_used=energy_used if energy_used else None,
                 )
             )
 

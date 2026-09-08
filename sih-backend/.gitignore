@@ -40,11 +40,22 @@ ENV/
 backend/app/ml/artifacts/*.pkl
 backend/app/ml/artifacts/*.joblib
 backend/app/ml/artifacts/*.model
+backend/app/ml/artifacts/*.npz
 data/
 data/raw/
 data/processed/
+backend/data/
+# curated OFAC sanctions seed is committed source data (not generated corpus)
+!backend/app/data/
+!backend/app/data/sanctions_seed.json
 *.csv.gz
 *.tar.gz
+
+# ── Download artifacts ───────────────────────────────────────────────────────
+*.part
+
+# ── EDA output (generated, not source) ───────────────────────────────────────
+eda_output/
 
 # ── Alembic auto-generated (only commit intentional migrations) ───────────────
 # Don't add specific revision files here — all are committed intentionally
@@ -77,3 +88,4 @@ node_modules/
 .next/
 dist/
 .turbo/
+frontend/

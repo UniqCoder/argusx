@@ -16,6 +16,12 @@ MODEL_PATH = os.path.join(ARTIFACTS_DIR, "risk_model.joblib")
 _model_instance = None
 
 
+def clear_model_cache():
+    """Clear cached model instance."""
+    global _model_instance
+    _model_instance = None
+
+
 def get_model():
     """Lazy load singleton XGBoost model instance."""
     global _model_instance
@@ -23,10 +29,9 @@ def get_model():
         if os.path.exists(MODEL_PATH):
             _model_instance = joblib.load(MODEL_PATH)
         else:
-            # Fallback for initial tests / cold environment
-            from app.ml.train import generate_synthetic_elliptic_dataset, train_elliptic_model
-            df_f, df_c = generate_synthetic_elliptic_dataset(n_samples=2000)
-            train_elliptic_model(df_f, df_c)
+            # Train from the processed splits + embedding store if artifact is missing
+            from app.ml.train import train_combined_model
+            train_combined_model()
             _model_instance = joblib.load(MODEL_PATH)
     return _model_instance
 

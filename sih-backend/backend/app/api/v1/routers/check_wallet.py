@@ -11,13 +11,14 @@ Target: p95 < 200ms.
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from redis.asyncio import Redis
 
 from app.api.v1.deps import VaspKeyDep
 from app.schemas.check_wallet import CheckWalletRequest, CheckWalletResponse
-from app.schemas.common import AlertAction, ErrorEnvelope
+from app.schemas.common import AlertAction, Chain, ErrorEnvelope
 from app.services import registry_service
+from app.workers.tasks.alerts import notify_alert_task
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,18 @@ async def check_wallet(
     Queries the Redis risk registry only (<5ms hot path).
     Dispatches alert processing asynchronously via Celery on hold/block decisions.
     """
+    if body.chain not in (Chain.BTC, Chain.ETH, Chain.TRON):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": {
+                    "code": "UNSUPPORTED_CHAIN",
+                    "message": f"Blockchain network '{body.chain.value}' is not supported for risk check. Supported networks: BTC, ETH, TRON.",
+                    "details": {"chain": body.chain.value},
+                }
+            },
+        )
+
     score, action, case_ref = await registry_service.check_wallet_hot_path(
         redis_client=redis_client,
         chain=body.chain.value,
@@ -58,7 +71,6 @@ async def check_wallet(
     # If action is hold or block, dispatch asynchronous alert notification off the response path
     if action in (AlertAction.hold, AlertAction.block):
         try:
-            from app.workers.tasks.alerts import notify_alert_task
             notify_alert_task.apply_async(
                 kwargs={
                     "chain": body.chain.value,

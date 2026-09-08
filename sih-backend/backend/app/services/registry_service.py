@@ -8,7 +8,8 @@ Latency target: p95 < 200ms (Redis only in hot path).
 No Postgres or Neo4j synchronous calls allowed.
 """
 import json
-import logging
+import structlog
+import time
 from datetime import datetime, timezone
 from typing import Any, Optional, Tuple
 
@@ -18,7 +19,7 @@ from redis.asyncio import Redis
 from app.core.config import get_settings
 from app.schemas.common import AlertAction, RiskTier
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 settings = get_settings()
 
 _redis_pool: Optional[Redis] = None
@@ -51,15 +52,28 @@ def format_risk_key(chain: str, address: str) -> str:
 
 
 async def get_risk_entry(redis_client: Redis, chain: str, address: str) -> Optional[dict[str, Any]]:
-    """Retrieve raw risk registry entry for a wallet address from Redis."""
+    """Retrieve raw risk registry entry for a wallet address from Redis.
+
+    Audit OBSERVABILITY (Group 1): every network round-trip to Redis is logged
+    with key + hit/miss + latency (the stored payload is never logged).
+    """
     key = format_risk_key(chain, address)
+    start = time.perf_counter()
     try:
         raw = await redis_client.get(key)
+        hit = bool(raw)
+        latency_ms = round((time.perf_counter() - start) * 1000.0, 2)
+        logger.info(
+            "redis_risk_registry_roundtrip",
+            key=key,
+            hit=hit,
+            latency_ms=latency_ms,
+        )
         if not raw:
             return None
         return json.loads(raw)
     except Exception as e:
-        logger.warning("redis_risk_registry_lookup_failed", extra={"key": key, "error": str(e)})
+        logger.warning("redis_risk_registry_lookup_failed", key=key, error=str(e))
         return None
 
 
@@ -71,8 +85,16 @@ async def set_risk_entry(
     tier: Any = RiskTier.low,
     case_ref: Optional[str] = None,
     ttl: int = 2592000,  # 30 days default TTL
+    source: Optional[str] = None,
+    designation: Optional[dict[str, Any]] = None,
 ) -> None:
-    """Store or refresh a risk entry in the Redis risk registry."""
+    """Store or refresh a risk entry in the Redis risk registry.
+
+    source/designation are optional provenance fields used to mark entries seeded
+    from the OFAC sanctions list (source="ofac_sdn"). They are omitted for
+    ML-derived registry entries so /risk can distinguish a deterministic
+    sanctions override from a behavioral model score.
+    """
     client = redis_client if redis_client is not None else get_redis_client()
     key = format_risk_key(chain, address)
     payload = {
@@ -82,6 +104,10 @@ async def set_risk_entry(
         "flagged_at": datetime.now(timezone.utc).isoformat(),
         "ttl": ttl,
     }
+    if source is not None:
+        payload["source"] = source
+    if designation is not None:
+        payload["designation"] = designation
     await client.set(key, json.dumps(payload), ex=ttl)
 
 

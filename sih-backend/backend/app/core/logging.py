@@ -12,6 +12,20 @@ import structlog
 from app.core.config import get_settings
 
 
+def _flatten_extra(logger, method_name: str, event_dict: dict) -> dict:
+    """
+    Spread structlog `extra={...}` payloads into top-level fields.
+
+    Legacy call sites use `logger.info("event", extra={...})`. Without this,
+    those fields render as a nested `extra=` blob (or are silently dropped when
+    a plain stdlib logger is used). Group 1 observability fix.
+    """
+    extra = event_dict.pop("extra", None)
+    if isinstance(extra, dict):
+        event_dict.update(extra)
+    return event_dict
+
+
 def configure_logging() -> None:
     settings = get_settings()
     log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
@@ -19,6 +33,7 @@ def configure_logging() -> None:
     is_prod = settings.app_env.lower() == "production"
 
     shared_processors = [
+        _flatten_extra,
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,

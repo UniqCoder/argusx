@@ -5,25 +5,28 @@ Populates Wallet, Transaction, VASP, and Cluster nodes in Neo4j from blockchain 
 Runs asynchronously off any API request path.
 """
 import asyncio
-import logging
+import structlog
 from typing import List, Optional
 
 from app.core.config import get_settings
 from app.graph import cypher
 from app.graph.neo4j_client import run_query
 from app.schemas.common import Chain
+from app.services.explorers.base import ExplorerUnavailableError
 from app.services.explorers.btc_explorer import BitcoinExplorer
 from app.services.explorers.eth_explorer import EthereumExplorer
 from app.services.explorers.tron_explorer import TronExplorer
 from app.services.explorers.known_vasps import lookup_known_vasp
 from app.workers.celery_app import celery_app
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 settings = get_settings()
 
 btc_explorer = BitcoinExplorer()
 eth_explorer = EthereumExplorer()
 tron_explorer = TronExplorer()
+
+MAX_GRAPH_TRANSFERS = 50
 
 
 async def _build_wallet_graph_async(address: str, chain: str, max_depth: int = 2) -> dict:
@@ -43,15 +46,24 @@ async def _build_wallet_graph_async(address: str, chain: str, max_depth: int = 2
         visited_addresses.add(curr_addr)
 
         # 1. Fetch transactions via appropriate explorer
-        if chain_upper == Chain.BTC.value:
-            txs = await btc_explorer.get_transactions(curr_addr, limit=15)
-        elif chain_upper == Chain.ETH.value:
-            txs = await eth_explorer.get_transactions(curr_addr, limit=15)
-        elif chain_upper == Chain.TRON.value:
-            txs = await tron_explorer.get_transactions(curr_addr, limit=15)
-        else:
-            logger.info("unsupported_chain_for_graph_builder", extra={"chain": chain})
-            break
+        try:
+            if chain_upper == Chain.BTC.value:
+                txs = await btc_explorer.get_transactions(curr_addr, limit=MAX_GRAPH_TRANSFERS)
+            elif chain_upper == Chain.ETH.value:
+                txs = await eth_explorer.get_transactions(curr_addr, limit=MAX_GRAPH_TRANSFERS)
+            elif chain_upper == Chain.TRON.value:
+                txs = await tron_explorer.get_transactions(curr_addr, limit=MAX_GRAPH_TRANSFERS)
+            else:
+                logger.info("unsupported_chain_for_graph_builder", chain=chain)
+                break
+        except ExplorerUnavailableError as exc:
+            logger.error(
+                "graph_builder_explorer_unavailable",
+                address=curr_addr,
+                chain=chain_upper,
+                error=str(exc),
+            )
+            continue
 
         # 2. Ingest transaction hops into Neo4j
         for tx in txs:
@@ -92,16 +104,14 @@ async def _build_wallet_graph_async(address: str, chain: str, max_depth: int = 2
                     queue.append((tx.to_address, depth + 1))
 
             except Exception as e:
-                logger.warning("graph_hop_insert_failed", extra={"tx_hash": tx.tx_hash, "error": str(e)})
+                logger.warning("graph_hop_insert_failed", tx_hash=tx.tx_hash, error=str(e))
 
     logger.info(
         "graph_builder_completed",
-        extra={
-            "address": address,
-            "chain": chain,
-            "hops_ingested": total_hops_ingested,
-            "vasp_discovered": vasp_discovered,
-        },
+        address=address,
+        chain=chain,
+        hops_ingested=total_hops_ingested,
+        vasp_discovered=vasp_discovered,
     )
 
     return {
