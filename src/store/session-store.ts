@@ -64,7 +64,15 @@ export const useSessionStore = create<SessionState>((set) => ({
 
   signup: async ({ email, password }) => {
     set({ isLoading: true });
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        // Return the user to wherever they signed up from (prod URL on Vercel,
+        // localhost in dev) instead of the Supabase dashboard's Site URL.
+        emailRedirectTo: window.location.origin,
+      },
+    });
     set({ isLoading: false });
     if (error) throw new Error(error.message);
     // Supabase sends a confirmation email — user must verify before signing in

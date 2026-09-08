@@ -11,7 +11,7 @@ export const LandingPage: React.FC = () => {
   const [innerTranslateY, setInnerTranslateY] = useState(0);
   const [buttonScale, setButtonScale] = useState(0);
   const [overlayOpacity, setOverlayOpacity] = useState(0);
-  const rafRef = useRef<number>();
+  const rafRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     const handleRAF = () => {

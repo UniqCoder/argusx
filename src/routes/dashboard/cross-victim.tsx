@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useCorrelation } from "@/hooks/use-correlation";
 import { useCaseContext } from "@/store/case-context-store";
 import { MOCK_CASES } from "@/lib/mock-data";
+import type { Chain } from "@/lib/api-types";
 
 export const Route = createFileRoute("/dashboard/cross-victim")({
   component: CrossVictim,
@@ -62,7 +63,7 @@ function CrossVictim() {
     "BTC" | "ETH" | "TRON" | "BSC" | "Polygon"
   >("ETH");
 
-  const { signal: sig, loading, error } = useCorrelation(wallet, chain);
+  const { signal: sig, loading, error } = useCorrelation(wallet, chain as Chain);
 
   const handleSearch = () => {
     const trimmed = input.trim();

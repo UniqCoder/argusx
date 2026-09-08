@@ -4,6 +4,7 @@ import { MOCK_CASES } from "@/lib/mock-data";
 import { useWalletRisk } from "@/hooks/use-wallet";
 import { useCaseContext } from "@/store/case-context-store";
 import { WalletSelector } from "@/components/dashboard/WalletSelector";
+import type { Chain } from "@/lib/api-types";
 
 export const Route = createFileRoute("/dashboard/risk")({
   component: RiskIntelligence,
@@ -95,7 +96,7 @@ function RiskIntelligence() {
 
   const { riskScore: liveScore, signals: liveSignals } = useWalletRisk(
     walletToAnalyze,
-    chainToAnalyze,
+    chainToAnalyze as Chain,
   );
   const totalScore = liveScore;
   const scoreColor =
