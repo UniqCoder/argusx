@@ -5,7 +5,7 @@ Routes:
   - GET /api/v1/wallets/{address}/trace: multi-hop trace to nearest VASP (Phase 3)
   - GET /api/v1/wallets/{address}/risk:  ML risk score + SHAP evidence (Phase 4)
 """
-import logging
+import structlog
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
@@ -17,7 +17,7 @@ from app.schemas.common import Chain, ErrorEnvelope
 from app.schemas.wallet import RiskResponse, TraceResponse
 from app.services import risk_service, tracing_service
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/wallets", tags=["wallets"])
 
@@ -50,12 +50,10 @@ async def trace_wallet(
     )
     logger.info(
         "wallet_traced",
-        extra={
-            "address": address,
-            "chain": chain.value,
-            "hops_count": result.hops_count,
-            "nearest_vasp": result.nearest_vasp,
-        },
+        address=address,
+        chain=chain.value,
+        hops_count=result.hops_count,
+        nearest_vasp=result.nearest_vasp,
     )
     return result
 

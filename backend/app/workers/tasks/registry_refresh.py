@@ -5,16 +5,16 @@ Computes ML risk score and populates the Redis risk registry (risk:{chain}:{addr
 so /check-wallet hot-path lookups remain purely in Redis.
 """
 import asyncio
-import logging
+import structlog
 from typing import Optional
 
 from app.core.config import get_settings
-from app.db.session import async_session_factory
+from app.db.session import AsyncSessionLocal
 from app.schemas.common import Chain
 from app.services import registry_service, risk_service
 from app.workers.celery_app import celery_app
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 settings = get_settings()
 
 
@@ -22,7 +22,7 @@ async def _refresh_wallet_risk_async(address: str, chain: str, case_ref: Optiona
     """Async helper evaluating risk and setting Redis registry key."""
     chain_enum = Chain(chain.upper())
     
-    async with async_session_factory() as db:
+    async with AsyncSessionLocal() as db:
         risk_res = await risk_service.evaluate_wallet_risk(
             db=db,
             address=address,
@@ -40,12 +40,10 @@ async def _refresh_wallet_risk_async(address: str, chain: str, case_ref: Optiona
 
     logger.info(
         "registry_risk_refreshed",
-        extra={
-            "address": address,
-            "chain": chain,
-            "score": risk_res.risk_score,
-            "tier": risk_res.risk_tier.value,
-        },
+        address=address,
+        chain=chain,
+        score=risk_res.risk_score,
+        tier=risk_res.risk_tier.value,
     )
 
     return {

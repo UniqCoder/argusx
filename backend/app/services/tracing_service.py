@@ -6,7 +6,7 @@ Strictly layered: Routers -> TracingService -> Neo4j / Explorers / PostgreSQL.
 """
 import uuid
 from datetime import datetime, timezone
-import logging
+import structlog
 from typing import List, Optional
 
 from fastapi import HTTPException, status
@@ -19,12 +19,13 @@ from app.graph.neo4j_client import run_query
 from app.models.wallet import Wallet
 from app.schemas.common import Chain, RiskTier
 from app.schemas.wallet import Hop, TraceResponse, WalletRead
+from app.services.explorers.base import ExplorerUnavailableError
 from app.services.explorers.btc_explorer import BitcoinExplorer
 from app.services.explorers.eth_explorer import EthereumExplorer
 from app.services.explorers.tron_explorer import TronExplorer
 from app.services.explorers.known_vasps import lookup_known_vasp
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 MAX_TRACE_TRANSFERS = 50
 
@@ -79,7 +80,7 @@ async def trace_wallet_to_vasp(
     nearest_vasp: Optional[str] = None
 
     if chain not in (Chain.BTC, Chain.ETH, Chain.TRON):
-        logger.warning("unsupported_chain_for_tracing", extra={"chain": chain.value, "address": address})
+        logger.warning("unsupported_chain_for_tracing", chain=chain.value, address=address)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
@@ -92,15 +93,28 @@ async def trace_wallet_to_vasp(
         )
 
     # Live explorer data is authoritative for the queried wallet so cached graph
-    # edges cannot mask current amounts or return stale fixed-size results.
-    if chain == Chain.BTC:
-        raw_txs = await btc_explorer.get_transactions(address, limit=MAX_TRACE_TRANSFERS)
-    elif chain == Chain.ETH:
-        raw_txs = await eth_explorer.get_transactions(address, limit=MAX_TRACE_TRANSFERS)
-    elif chain == Chain.TRON:
-        raw_txs = await tron_explorer.get_transactions(address, limit=MAX_TRACE_TRANSFERS)
-    else:
-        raw_txs = []
+    # edges cannot mask current amounts or return stale fixed-size results. An
+    # explorer outage is surfaced as an explicit 503, never a silent empty path.
+    try:
+        if chain == Chain.BTC:
+            raw_txs = await btc_explorer.get_transactions(address, limit=MAX_TRACE_TRANSFERS)
+        elif chain == Chain.ETH:
+            raw_txs = await eth_explorer.get_transactions(address, limit=MAX_TRACE_TRANSFERS)
+        elif chain == Chain.TRON:
+            raw_txs = await tron_explorer.get_transactions(address, limit=MAX_TRACE_TRANSFERS)
+        else:
+            raw_txs = []
+    except ExplorerUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "error": {
+                    "code": "explorer_unavailable",
+                    "message": f"Blockchain explorer unavailable for {chain.value}: {exc}",
+                    "details": {"chain": chain.value, "address": address},
+                }
+            },
+        ) from exc
 
     if raw_txs:
         for tx in raw_txs:
@@ -128,6 +142,14 @@ async def trace_wallet_to_vasp(
                 cypher.GET_WALLET_HOPS,
                 {"address": address, "chain": chain.value, "limit": MAX_TRACE_TRANSFERS},
             )
+            # Audit OBSERVABILITY (Group 1): how many hops the Neoo4j fallback
+            # actually returned (0 = empty graph, distinct from skipped).
+            logger.info(
+                "neo4j_hops_query",
+                address=address,
+                chain=chain.value,
+                row_count=len(records),
+            )
             for r in records:
                 dt = datetime.fromisoformat(r["timestamp"].replace("Z", "+00:00")) if r.get("timestamp") else datetime.now(timezone.utc)
                 hops.append(
@@ -143,7 +165,7 @@ async def trace_wallet_to_vasp(
                 if not nearest_vasp and r.get("vasp_name"):
                     nearest_vasp = r["vasp_name"]
         except Exception as e:
-            logger.warning("neo4j_hops_query_failed", extra={"error": str(e)})
+            logger.warning("neo4j_hops_query_failed", address=address, chain=chain.value, error=str(e))
 
     if raw_txs:
         # Trigger async background Neo4j graph builder task for deep multi-hop traversal
@@ -153,8 +175,22 @@ async def trace_wallet_to_vasp(
                 kwargs={"address": address, "chain": chain.value, "max_depth": 2},
                 retry=False,
             )
+            # Audit OBSERVABILITY (Group 1): was the graph-build actually queued
+            # (and consumable), or silently dropped for lack of a worker?
+            logger.info(
+                "graph_builder_task_dispatched",
+                address=address,
+                chain=chain.value,
+                queued=True,
+            )
         except Exception as e:
-            logger.warning("graph_builder_dispatch_failed", extra={"error": str(e)})
+            logger.warning(
+                "graph_builder_dispatch_failed",
+                address=address,
+                chain=chain.value,
+                queued=False,
+                error=str(e),
+            )
 
     # 3. Update VASP attribution in PostgreSQL if found
     if nearest_vasp and wallet.vasp_identified != nearest_vasp:

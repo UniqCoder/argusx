@@ -1,4 +1,4 @@
-"""Initial schema for Unigraph: complaints, wallets, complaint_wallets, cases, case_wallets, alerts, audit_log
+"""Initial schema for Argus: complaints, wallets, complaint_wallets, cases, case_wallets, alerts, audit_log
 
 Revision ID: 0001_phase1_tables
 Revises: 

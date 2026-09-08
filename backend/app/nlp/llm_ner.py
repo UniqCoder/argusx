@@ -10,7 +10,7 @@ Air-gap safety guarantee:
   - Automatically falls back to deterministic spaCy/Regex validator on LLM failure or timeout.
 """
 import json
-import logging
+import structlog
 import time
 from typing import Any, Dict, List, Optional
 
@@ -19,7 +19,7 @@ import httpx
 from app.core.config import get_settings
 from app.nlp.spacy_fallback import extract_entities_spacy_fallback
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 settings = get_settings()
 
 OLLAMA_LOCAL_URL = getattr(settings, "ollama_url", "http://127.0.0.1:11434")

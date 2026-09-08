@@ -194,7 +194,7 @@ async def get_case_report(
     ML risk scores, SHAP evidence, multi-hop trace paths, and NCRP complaints.
     """
     pdf_bytes = await report_service.generate_case_pdf_report(db, id)
-    filename = f"unigraph_case_{str(id)[:8]}.pdf"
+    filename = f"argus_case_{str(id)[:8]}.pdf"
 
     await audit_service.record_audit_log(
         db=db,

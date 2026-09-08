@@ -11,21 +11,29 @@ Heavy jobs run here, off the API request path:
   Phase 3: graph_builder task (multi-hop traversal, Neo4j write)
   Phase 4: registry_refresh task (re-materialise risk scores after new label)
   Phase 5: pdf_report task
+  OSINT:   osint_refresh task (bulk-sync structured OSINT cache)
 """
 from celery import Celery
 
 from app.core.config import get_settings
+from app.core.logging import configure_logging
+
+# Ensure the worker emits the same structured logs as the API process
+# (otherwise stdlib default formatting hides the structured fields).
+configure_logging()
 
 settings = get_settings()
 
 celery_app = Celery(
-    "unigraph",
+    "argus",
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
     include=[
         "app.workers.tasks.alerts",
         "app.workers.tasks.graph_builder",
         "app.workers.tasks.registry_refresh",
+        "app.workers.tasks.illicit_enrichment",
+        "app.workers.tasks.osint_refresh",
         # Phase 5: "app.workers.tasks.pdf_report",
     ],
 )

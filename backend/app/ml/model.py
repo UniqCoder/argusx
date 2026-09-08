@@ -29,11 +29,9 @@ def get_model():
         if os.path.exists(MODEL_PATH):
             _model_instance = joblib.load(MODEL_PATH)
         else:
-            # Train from real dataset if artifact is missing
-            from app.ml.train import get_data_dir, load_real_elliptic_dataset, train_elliptic_model
-            data_dir = get_data_dir()
-            df_f, df_c = load_real_elliptic_dataset(data_dir)
-            train_elliptic_model(df_f, df_c)
+            # Train from the processed splits + embedding store if artifact is missing
+            from app.ml.train import train_combined_model
+            train_combined_model()
             _model_instance = joblib.load(MODEL_PATH)
     return _model_instance
 

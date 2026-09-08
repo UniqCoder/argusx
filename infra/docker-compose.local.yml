@@ -1,0 +1,8 @@
+# infra/docker-compose.local.yml — local-only overrides (not committed to CI).
+# Reason: a host Windows PostgreSQL 16 service already owns port 5432 and cannot
+# be stopped from a non-elevated shell, so the compose postgres maps to host 5433.
+# Inside the compose network the backend still reaches postgres:5432 (unchanged).
+services:
+  postgres:
+    ports:
+      - "5433:5432"

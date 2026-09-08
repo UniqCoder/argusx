@@ -12,7 +12,7 @@ services:
 
   postgres:
     image: postgres:15-alpine
-    container_name: unigraph_dev_postgres
+    container_name: argus_dev_postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: unigraph
@@ -26,11 +26,11 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - unigraph_dev_net
+      - argus_dev_net
 
   neo4j:
     image: neo4j:5-community
-    container_name: unigraph_dev_neo4j
+    container_name: argus_dev_neo4j
     restart: unless-stopped
     environment:
       NEO4J_AUTH: neo4j/devpass
@@ -44,11 +44,11 @@ services:
       retries: 5
       start_period: 30s
     networks:
-      - unigraph_dev_net
+      - argus_dev_net
 
   redis:
     image: redis:7-alpine
-    container_name: unigraph_dev_redis
+    container_name: argus_dev_redis
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -58,13 +58,13 @@ services:
       timeout: 3s
       retries: 5
     networks:
-      - unigraph_dev_net
+      - argus_dev_net
 
   backend:
     build:
       context: ../backend
       dockerfile: Dockerfile
-    container_name: unigraph_dev_backend
+    container_name: argus_dev_backend
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+asyncpg://unigraph:devpass@postgres:5432/unigraph
@@ -90,8 +90,8 @@ services:
     volumes:
       - ../backend:/app
     networks:
-      - unigraph_dev_net
+      - argus_dev_net
 
 networks:
-  unigraph_dev_net:
+  argus_dev_net:
     driver: bridge

@@ -10,7 +10,7 @@ from typing import List
 import httpx
 
 from app.schemas.common import Chain
-from app.services.explorers.base import BlockchainExplorer, RawTx
+from app.services.explorers.base import BlockchainExplorer, ExplorerUnavailableError, RawTx
 from app.services.explorers.known_vasps import lookup_known_vasp
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ class BitcoinExplorer(BlockchainExplorer):
 
         headers = {
             "Accept": "application/json",
-            "User-Agent": "Unigraph-Forensics/1.0",
+            "User-Agent": "Argus-Forensics/1.0",
         }
 
         for base_url in endpoints:
@@ -50,7 +50,7 @@ class BitcoinExplorer(BlockchainExplorer):
                 logger.warning("btc_explorer_request_failed", extra={"base_url": base_url, "error": str(e)})
 
         logger.error("all_btc_explorers_failed", extra={"address": addr})
-        return []
+        raise ExplorerUnavailableError(f"All BTC explorer endpoints failed for {addr}")
 
     def _parse_esplora_txs(self, target_address: str, tx_list: list, limit: int) -> List[RawTx]:
         results: List[RawTx] = []

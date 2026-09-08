@@ -10,7 +10,7 @@ from typing import List
 import httpx
 
 from app.schemas.common import Chain
-from app.services.explorers.base import BlockchainExplorer, RawTx
+from app.services.explorers.base import BlockchainExplorer, ExplorerUnavailableError, RawTx
 from app.services.explorers.known_vasps import lookup_known_vasp
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ class EthereumExplorer(BlockchainExplorer):
 
         headers = {
             "Accept": "application/json",
-            "User-Agent": "Unigraph-Forensics/1.0",
+            "User-Agent": "Argus-Forensics/1.0",
         }
 
         try:
@@ -44,11 +44,16 @@ class EthereumExplorer(BlockchainExplorer):
                     return []
                 elif resp.status_code == 429:
                     logger.warning("eth_explorer_rate_limited", extra={"address": addr})
-                    return []
+                    raise ExplorerUnavailableError(f"ETH explorer rate-limited for {addr}")
+                else:
+                    logger.warning("eth_explorer_non_200", extra={"status": resp.status_code})
+                    raise ExplorerUnavailableError(f"ETH explorer returned {resp.status_code} for {addr}")
+        except ExplorerUnavailableError:
+            raise
         except Exception as e:
             logger.warning("eth_explorer_request_failed", extra={"error": str(e)})
 
-        return []
+        raise ExplorerUnavailableError(f"ETH explorer failed for {addr}")
 
     def _parse_blockscout_txs(self, target_address: str, tx_items: list, limit: int) -> List[RawTx]:
         results: List[RawTx] = []
@@ -65,6 +70,13 @@ class EthereumExplorer(BlockchainExplorer):
             to_obj = item.get("to") or {}
             from_addr = from_obj.get("hash", "")
             to_addr = to_obj.get("hash", "")
+
+            try:
+                gas_price_wei = float(item.get("gas_price") or 0)
+                gas_used = float(item.get("gas_used") or 0)
+            except (TypeError, ValueError):
+                gas_price_wei = 0.0
+                gas_used = 0.0
 
             # Parse timestamp
             raw_ts = item.get("timestamp")
@@ -103,6 +115,9 @@ class EthereumExplorer(BlockchainExplorer):
                         chain=Chain.ETH,
                         timestamp=ts,
                         vasp_tag=vasp_tag,
+                        fee_native=(gas_price_wei * gas_used) / 1e18 if gas_price_wei and gas_used else None,
+                        gas_price_gwei=gas_price_wei / 1e9 if gas_price_wei else None,
+                        gas_used=gas_used if gas_used else None,
                     )
                 )
 

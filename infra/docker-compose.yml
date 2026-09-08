@@ -1,6 +1,6 @@
 version: "3.9"
 
-# ── Unigraph — docker-compose.yml ─────────────────────────────────────────────
+# ── Argus — docker-compose.yml ────────────────────────────────────────────────
 # Single command to bring up the full backend stack:
 #   docker-compose up --build
 #
@@ -13,7 +13,7 @@ services:
   # ── PostgreSQL 15 ──────────────────────────────────────────────────────────
   postgres:
     image: postgres:15-alpine
-    container_name: unigraph_postgres
+    container_name: argus_postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: unigraph
@@ -30,12 +30,12 @@ services:
       retries: 5
       start_period: 15s
     networks:
-      - unigraph_net
+      - argus_net
 
   # ── Neo4j 5 ────────────────────────────────────────────────────────────────
   neo4j:
     image: neo4j:5-community
-    container_name: unigraph_neo4j
+    container_name: argus_neo4j
     restart: unless-stopped
     environment:
       NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-changeme_in_prod}
@@ -56,12 +56,12 @@ services:
       retries: 5
       start_period: 30s
     networks:
-      - unigraph_net
+      - argus_net
 
   # ── Redis 7 ────────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
-    container_name: unigraph_redis
+    container_name: argus_redis
     restart: unless-stopped
     command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
     volumes:
@@ -75,14 +75,14 @@ services:
       retries: 5
       start_period: 10s
     networks:
-      - unigraph_net
+      - argus_net
 
   # ── Backend (FastAPI) ──────────────────────────────────────────────────────
   backend:
     build:
       context: ../backend
       dockerfile: Dockerfile
-    container_name: unigraph_backend
+    container_name: argus_backend
     restart: unless-stopped
     environment:
       # Database
@@ -102,8 +102,12 @@ services:
       JWT_REFRESH_TOKEN_EXPIRE_DAYS: 7
       # VASP API keys (comma-separated)
       VASP_API_KEYS: ${VASP_API_KEYS:-dev_vasp_key_1}
-      # Explorer API keys
+      # Explorer API keys (all optional — keyless defaults work)
       TRONSCAN_API_KEY: ${TRONSCAN_API_KEY:-}
+      ETHERSCAN_API_KEY: ${ETHERSCAN_API_KEY:-}
+      TRONGRID_API_KEY: ${TRONGRID_API_KEY:-}
+      # OSINT sources
+      BITCOINABUSE_API_KEY: ${BITCOINABUSE_API_KEY:-}
       # Ollama Local LLM (host connection)
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       # App
@@ -133,7 +137,62 @@ services:
       retries: 5
       start_period: 30s
     networks:
-      - unigraph_net
+      - argus_net
+
+# ── Celery worker (async Neo4j graph build, alerts, registry refresh) ──────
+  celery:
+    image: infra-backend
+    container_name: argus_celery
+    restart: unless-stopped
+    environment:
+      # Database
+      DATABASE_URL: postgresql+asyncpg://unigraph:${POSTGRES_PASSWORD:-changeme_in_prod}@postgres:5432/unigraph
+      # Neo4j
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-changeme_in_prod}
+      # Redis
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      # JWT (must match backend)
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev_secret_DO_NOT_USE_IN_PROD}
+      JWT_ALGORITHM: HS256
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: 60
+      JWT_REFRESH_TOKEN_EXPIRE_DAYS: 7
+      # VASP API keys (comma-separated)
+      VASP_API_KEYS: ${VASP_API_KEYS:-dev_vasp_key_1}
+      # Explorer API keys (all optional — keyless defaults work)
+      TRONSCAN_API_KEY: ${TRONSCAN_API_KEY:-}
+      ETHERSCAN_API_KEY: ${ETHERSCAN_API_KEY:-}
+      TRONGRID_API_KEY: ${TRONGRID_API_KEY:-}
+      # OSINT sources
+      BITCOINABUSE_API_KEY: ${BITCOINABUSE_API_KEY:-}
+      # Ollama Local LLM (host connection)
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      # App
+      APP_ENV: ${APP_ENV:-development}
+      APP_VERSION: "0.1.0"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    command: celery -A app.workers.celery_app worker --loglevel=info
+    volumes:
+      # Mount source code so the worker picks up code changes live
+      - ../backend:/app
+      # Mount raw datasets
+      - ../data:/app/data
+    healthcheck:
+      disable: true
+    networks:
+      - argus_net
 
 volumes:
   postgres_data:
@@ -142,5 +201,5 @@ volumes:
   redis_data:
 
 networks:
-  unigraph_net:
+  argus_net:
     driver: bridge

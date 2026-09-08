@@ -1,5 +1,5 @@
 """
-app/main.py — FastAPI application entrypoint for Unigraph (SIH26183).
+app/main.py — FastAPI application entrypoint for Argus (SIH26183).
 
 Architecture: routers/ → services/ → models/ + graph/ + nlp/ + ml/
 Routers are the ONLY layer that speaks HTTP — services are framework-agnostic.
@@ -12,7 +12,9 @@ Startup sequence:
 
 On shutdown:
   - Close Neo4j driver connection pool
+  - Close Redis client pool
 """
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import Any
@@ -42,16 +44,22 @@ settings = get_settings()
 # ── Lifespan (startup / shutdown) ─────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("unigraph_startup", extra={"version": settings.app_version})
+    logger.info("argus_startup", extra={"version": settings.app_version})
+    from app.services import registry_service, sanctions_service
+
+    # Seed the curated OFAC SDN list into the Redis risk registry (best-effort,
+    # fire-and-forget so startup is not blocked by Redis availability).
+    asyncio.create_task(sanctions_service.ensure_redis_seeded())
     yield
     # Shutdown
     await close_driver()
-    logger.info("unigraph_shutdown")
+    await registry_service.close_redis()
+    logger.info("argus_shutdown")
 
 
 # ── App factory ───────────────────────────────────────────────────────────────
 app = FastAPI(
-    title="Unigraph — Real-Time Crypto Fraud Attribution",
+    title="Argus — Real-Time Crypto Fraud Attribution",
     description=(
         "SIH26183 · MHA/I4C · Blockchain & Cybersecurity\n\n"
         "All routes require `Authorization: Bearer <JWT>` except:\n"

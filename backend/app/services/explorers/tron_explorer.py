@@ -12,7 +12,7 @@ import httpx
 
 from app.core.config import get_settings
 from app.schemas.common import Chain
-from app.services.explorers.base import BlockchainExplorer, RawTx
+from app.services.explorers.base import BlockchainExplorer, ExplorerUnavailableError, RawTx
 from app.services.explorers.known_vasps import lookup_known_vasp
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ class TronExplorer(BlockchainExplorer):
 
         headers = {
             "Accept": "application/json",
-            "User-Agent": "Unigraph-Forensics/1.0",
+            "User-Agent": "Argus-Forensics/1.0",
         }
         if self.api_key:
             headers["TRON-PRO-API-KEY"] = self.api_key
@@ -57,13 +57,16 @@ class TronExplorer(BlockchainExplorer):
                     return []
                 elif resp.status_code == 429:
                     logger.warning("tron_explorer_rate_limited", extra={"address": addr})
-                    return []
+                    raise ExplorerUnavailableError(f"TRON explorer rate-limited for {addr}")
                 else:
                     logger.warning("tronscan_returned_non_200", extra={"status": resp.status_code, "text": resp.text[:200]})
+                    raise ExplorerUnavailableError(f"TRON explorer returned {resp.status_code} for {addr}")
+        except ExplorerUnavailableError:
+            raise
         except Exception as e:
             logger.warning("tron_explorer_request_failed", extra={"error": str(e), "address": addr})
 
-        return []
+        raise ExplorerUnavailableError(f"TRON explorer failed for {addr}")
 
     def _parse_tronscan_txs(self, target_address: str, tx_list: list, limit: int) -> List[RawTx]:
         results: List[RawTx] = []
@@ -89,6 +92,13 @@ class TronExplorer(BlockchainExplorer):
                 to_addr = contract_data["to_address"]
 
             token_info = item.get("tokenInfo") or {}
+            try:
+                net_fee_sun = float(item.get("net_fee") or item.get("netFee") or 0)
+                energy_fee_sun = float(item.get("energy_fee") or item.get("energyFee") or 0)
+                bandwidth_used = float(item.get("net_usage") or item.get("netUsage") or 0)
+                energy_used = float(item.get("energy_usage") or item.get("energyUsage") or 0)
+            except (TypeError, ValueError):
+                net_fee_sun = energy_fee_sun = bandwidth_used = energy_used = 0.0
             try:
                 decimals = max(0, int(token_info.get("tokenDecimal", 6) or 6))
             except (ValueError, TypeError):
@@ -129,6 +139,9 @@ class TronExplorer(BlockchainExplorer):
                     chain=Chain.TRON,
                     timestamp=ts,
                     vasp_tag=vasp_name,
+                        fee_native=(net_fee_sun + energy_fee_sun) / 1e6 if net_fee_sun or energy_fee_sun else None,
+                        bandwidth_used=bandwidth_used if bandwidth_used else None,
+                        energy_used=energy_used if energy_used else None,
                 )
             )
 
