@@ -1,4 +1,4 @@
-# Product Requirements Document — Unigraph
+# Product Requirements Document — Argus
 ### Real-Time Crypto Fraud Attribution System
 **SIH Problem Statement ID:** 26183 · **Organization:** Ministry of Home Affairs — I4C, CIS Division · **Theme:** Blockchain & Cybersecurity
 
@@ -76,7 +76,7 @@ Same north star as v0.1, unchanged:
 Mine the complaint database itself: the same wallet reported by multiple victims is a strong, self-contained freeze signal that needs zero blockchain data. **Backend:** exact-match/dedup SQL logic, scoring function. **Frontend:** one table view (§14, Cross-Victim View) — this is the cheapest end-to-end slice to demo, which is exactly why it's Phase 1 for both of you.
 
 ### USP 2 — Real-Time Chokepoint at Deposit ("stop the money before cash-out")
-VASPs query Unigraph on every incoming deposit before crediting the user. **Backend:** Redis risk registry, `/check-wallet` hook, mock VASP client, alert fan-out. **Frontend:** Alerts & Registry screen showing live hold/block decisions tied to case references. Most demo-able of the three without real blockchain infra — good second slice for a 2-person team.
+VASPs query Argus on every incoming deposit before crediting the user. **Backend:** Redis risk registry, `/check-wallet` hook, mock VASP client, alert fan-out. **Frontend:** Alerts & Registry screen showing live hold/block decisions tied to case references. Most demo-able of the three without real blockchain infra — good second slice for a 2-person team.
 
 ### USP 3 — 100% Data Sovereignty via Local LLM & On-Prem Graph
 FIR narratives never leave the intranet — entity extraction runs on a locally hosted LLM (Ollama + Llama-3/Mistral), graph lives in local Neo4j. **Backend only** — no frontend dependency beyond displaying already-extracted fields read-only. Treat as a stretch goal for a 2-person team (§20).
@@ -175,7 +175,7 @@ sequenceDiagram
 **Recommendation: one monorepo**, two independently runnable apps, one shared contracts folder. A monorepo beats two separate repos for a 2-person team specifically because the contract file needs to be visible and diffable to both people in the same PR review flow.
 
 ```
-unigraph/
+argus/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py                 # FastAPI app entrypoint
@@ -551,7 +551,7 @@ Assumes a multi-week SIH pre-finals runway (see §20 if this is actually a 36-ho
 
 ```mermaid
 gantt
-    title Unigraph — 2-Person Build Timeline
+    title Argus — 2-Person Build Timeline
     dateFormat  YYYY-MM-DD
     axisFormat  %b %d
     section Contract & Setup

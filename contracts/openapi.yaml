@@ -1,8 +1,8 @@
 openapi: "3.0.3"
 info:
-  title: Unigraph — Real-Time Crypto Fraud Attribution API
+  title: Argus — Real-Time Crypto Fraud Attribution API
   description: |
-    Backend API for Unigraph (SIH26183 — MHA/I4C).
+    Backend API for Argus (SIH26183 — MHA/I4C).
     
     **Auth schemes:**
     - `bearerAuth` (JWT): all `/api/v1/...` routes except `/api/v1/auth/login` and `/api/v1/auth/refresh`

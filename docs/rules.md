@@ -1,4 +1,4 @@
-# Rules — Unigraph Backend (for AI coding agents, e.g. Antigravity)
+# Rules — Argus Backend (for AI coding agents, e.g. Antigravity)
 
 ## Engineering rules — non-negotiable
 1. `contracts/openapi.yaml` is the source of truth. Never let a request/response shape drift from it — update the contract first, flag the change, then write code.

@@ -1,4 +1,4 @@
-# Unigraph — Real-Time Crypto Fraud Attribution System
+# Argus — Real-Time Crypto Fraud Attribution System
 **SIH26183 · MHA/I4C · Blockchain & Cybersecurity**
 
 > Ingest victim-reported wallet addresses, trace blockchain activity, identify the nearest exchange/VASP, detect laundering patterns, and produce actionable intelligence for law enforcement.
@@ -15,7 +15,7 @@
 
 ```bash
 git clone <repo-url>
-cd unigraph
+cd argus
 cp backend/.env.example backend/.env
 # Edit backend/.env — at minimum set JWT_SECRET_KEY to a random value
 ```
@@ -50,7 +50,7 @@ open http://localhost:8000/docs
 ```bash
 curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@unigraph.local","password":"devpass"}'
+  -d '{"email":"investigator@i4c.gov.in","password":"devpass"}'
 ```
 
 Copy the `access_token` → click **Authorize** in Swagger UI → paste as `Bearer <token>`.
@@ -60,7 +60,7 @@ Copy the `access_token` → click **Authorize** in Swagger UI → paste as `Bear
 ## 📁 Structure
 
 ```
-unigraph/
+argus/
 ├── backend/         Backend Owner — FastAPI, Postgres, Neo4j, Redis, Celery, ML
 ├── frontend/        Frontend Owner — React + TS (separate README)
 ├── contracts/       JOINT — openapi.yaml + entities.md (source of truth)
@@ -76,7 +76,7 @@ See [docs/unigraph-prd-v2.md](docs/unigraph-prd-v2.md) for the full product spec
 
 | Field | Value |
 |---|---|
-| Email | `admin@unigraph.local` |
+| Email | `investigator@i4c.gov.in` |
 | Password | `devpass` |
 | Role | `admin` |
 | VASP API key | `dev_vasp_key_1` (header: `X-API-Key`) |

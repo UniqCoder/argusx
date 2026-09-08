@@ -1,4 +1,4 @@
-# Unigraph (SIH26183) — Backend Implementation Plan
+# Argus (SIH26183) — Backend Implementation Plan
 
 **Owner:** Backend Owner (Rehan)
 **Scope:** FastAPI service, PostgreSQL, Neo4j, Redis, Celery workers, ML pipeline, blockchain-explorer integrations, local LLM/NER, auth issuance, `/check-wallet` hook, PDF report generation.

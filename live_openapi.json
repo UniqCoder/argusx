@@ -1,7 +1,7 @@
 ﻿{
     "openapi":  "3.1.0",
     "info":  {
-                 "title":  "Unigraph â Real-Time Crypto Fraud Attribution",
+                 "title":  "Argus â Real-Time Crypto Fraud Attribution",
                  "description":  "SIH26183 Â· MHA/I4C Â· Blockchain \u0026 Cybersecurity\n\nAll routes require `Authorization: Bearer \u003cJWT\u003e` except:\n- `POST /api/v1/auth/login` (no auth)\n- `POST /check-wallet` (X-API-Key header â VASP use only)\n- `GET /health` (no auth)\n\nError envelope: `{ \"error\": { \"code\", \"message\", \"details\" } }`",
                  "version":  "0.1.0"
              },

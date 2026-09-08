@@ -1,4 +1,4 @@
-# Unigraph — Shared Entity Vocabulary
+# Argus — Shared Entity Vocabulary
 
 > **Source of truth:** PRD §8.2. Both Pydantic schemas (backend) and TypeScript types (frontend) reference these definitions — never redefine an enum independently on either side.
 

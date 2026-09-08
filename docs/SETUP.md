@@ -1,4 +1,4 @@
-# SETUP.md — Running Unigraph Locally
+# SETUP.md — Running Argus Locally
 
 For anyone cloning this repo to work on the frontend, or to run the full stack locally. Read `docs/PRD.md` first for what the system actually does — this file is just "how do I get it running on my machine."
 
@@ -10,7 +10,7 @@ For anyone cloning this repo to work on the frontend, or to run the full stack l
 ## 2. Clone and start the core stack
 ```bash
 git clone <repo-url>
-cd unigraph-backend
+cd argus-backend
 docker-compose up
 ```
 This starts Postgres, Neo4j, Redis, and the FastAPI backend. Confirm it worked:

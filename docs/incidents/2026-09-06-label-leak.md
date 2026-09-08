@@ -148,3 +148,12 @@ The model never runs. No graph queries. No feature vector. No `predict_proba`. T
 | `risk_model.pre_graph_fix.joblib` | Backup of pre-graph-fix model (still the production artifact) |
 | `risk_model_metrics.pre_graph_fix.json` | Backup of pre-graph-fix metrics |
 | `relative_features_reference.pre_graph_fix.json` | Backup of pre-graph-fix relative features reference |
+
+> **Superseded artifact (not tracked, preserved here by reference):** the earlier
+> promotion's `final_recommendation.json` recommended the `task1_plus_task3_combined,
+> spw=1.0, 292 trees, lr 0.1111...` config that was **promoted-then-reverted**. Its
+> `test_split_at_promoted_and_strict` block happens to reproduce the restored
+> production numbers (threshold 0.70, BTC AUC-PR 0.4665, combined 0.5057), which can
+> mislead a reader into thinking spw=1.0/292-tree is the active config — it is not.
+> It is **not** committed to avoid stale-config ambiguity; the active production
+> artifact is the pre-graph-fix backup and its config is the source of truth here.
