@@ -1,0 +1,215 @@
+{
+  "config": "task1_plus_task3_combined (92f + tuned HPs)",
+  "tolerance": {
+    "auc_pr": 0.005,
+    "recall_pp": 0.01
+  },
+  "recommend": "promote_with_spw_neutral",
+  "mechanism_finding": "scale_pos_weight is redundant double-correction on top of per-chain sample_weight (B ~= A); promote with scale_pos_weight=1.0 (arm B / neutral)",
+  "arms": [
+    {
+      "arm": "A_chain_spw4.93",
+      "weight_mode": "chain",
+      "scale_pos_weight": 4.931116282851712,
+      "locked_threshold": 0.85,
+      "val_summary": {
+        "threshold": 0.85,
+        "precision": 0.8210578348986654,
+        "recall": 0.7864583333333334,
+        "fpr": 0.016659763449767592
+      },
+      "btc_test": {
+        "rows": 94950,
+        "threshold": 0.85,
+        "precision": 0.5479720279720279,
+        "recall": 0.39671931956257594,
+        "fpr": 0.017953161800648803,
+        "auc_pr": 0.4632944632061044,
+        "auc_roc": 0.8137937251676824,
+        "tp": 1959,
+        "fp": 1616,
+        "tn": 88396,
+        "fn": 2979
+      },
+      "eth_test": {
+        "rows": 1478,
+        "threshold": 0.85,
+        "precision": 0.9463087248322147,
+        "recall": 0.8597560975609756,
+        "fpr": 0.01391304347826087,
+        "auc_pr": 0.9710335397864016,
+        "auc_roc": 0.9902001590668081,
+        "tp": 282,
+        "fp": 16,
+        "tn": 1134,
+        "fn": 46
+      },
+      "combined_test": {
+        "rows": 96428,
+        "threshold": 0.85,
+        "precision": 0.5786212238574748,
+        "recall": 0.4255601974933536,
+        "fpr": 0.017902196090476295,
+        "auc_pr": 0.5016399435861072,
+        "auc_roc": 0.8249819753439853,
+        "tp": 2241,
+        "fp": 1632,
+        "tn": 89530,
+        "fn": 3025
+      }
+    },
+    {
+      "arm": "B_chain_spw1.0",
+      "weight_mode": "chain",
+      "scale_pos_weight": 1.0,
+      "locked_threshold": 0.7,
+      "val_summary": {
+        "threshold": 0.7,
+        "precision": 0.8288954635108481,
+        "recall": 0.7959280303030303,
+        "fpr": 0.015969441759860096
+      },
+      "btc_test": {
+        "rows": 94950,
+        "threshold": 0.7,
+        "precision": 0.5747023809523809,
+        "recall": 0.3910490076954232,
+        "fpr": 0.015875661022974715,
+        "auc_pr": 0.4666235346417487,
+        "auc_roc": 0.8543372978018123,
+        "tp": 1931,
+        "fp": 1429,
+        "tn": 88583,
+        "fn": 3007
+      },
+      "eth_test": {
+        "rows": 1478,
+        "threshold": 0.7,
+        "precision": 0.9273927392739274,
+        "recall": 0.8567073170731707,
+        "fpr": 0.019130434782608695,
+        "auc_pr": 0.9717802188196027,
+        "auc_roc": 0.9902690880169671,
+        "tp": 281,
+        "fp": 22,
+        "tn": 1128,
+        "fn": 47
+      },
+      "combined_test": {
+        "rows": 96428,
+        "threshold": 0.7,
+        "precision": 0.6038766038766039,
+        "recall": 0.42005317128750475,
+        "fpr": 0.01591671968583401,
+        "auc_pr": 0.5057312959388551,
+        "auc_roc": 0.8628237854518127,
+        "tp": 2212,
+        "fp": 1451,
+        "tn": 89711,
+        "fn": 3054
+      }
+    },
+    {
+      "arm": "C_uniform_spw4.93",
+      "weight_mode": "uniform",
+      "scale_pos_weight": 4.931116282851712,
+      "locked_threshold": 0.5,
+      "val_summary": {
+        "threshold": 0.5,
+        "precision": 0.8131921039961483,
+        "recall": 0.7997159090909091,
+        "fpr": 0.017856321045607252
+      },
+      "btc_test": {
+        "rows": 94950,
+        "threshold": 0.5,
+        "precision": 0.6047788182111721,
+        "recall": 0.37930336168489265,
+        "fpr": 0.013598186908412212,
+        "auc_pr": 0.4724650918272952,
+        "auc_roc": 0.85020333209881,
+        "tp": 1873,
+        "fp": 1224,
+        "tn": 88788,
+        "fn": 3065
+      },
+      "eth_test": {
+        "rows": 1478,
+        "threshold": 0.5,
+        "precision": 0.8775510204081632,
+        "recall": 0.9176829268292683,
+        "fpr": 0.036521739130434785,
+        "auc_pr": 0.9710688738919864,
+        "auc_roc": 0.9901219512195122,
+        "tp": 301,
+        "fp": 42,
+        "tn": 1108,
+        "fn": 27
+      },
+      "combined_test": {
+        "rows": 96428,
+        "threshold": 0.5,
+        "precision": 0.6319767441860465,
+        "recall": 0.412837067983289,
+        "fpr": 0.01388736534959742,
+        "auc_pr": 0.5124518496085162,
+        "auc_roc": 0.8583900375331294,
+        "tp": 2174,
+        "fp": 1266,
+        "tn": 89896,
+        "fn": 3092
+      }
+    },
+    {
+      "arm": "D_uniform_spw1.0",
+      "weight_mode": "uniform",
+      "scale_pos_weight": 1.0,
+      "locked_threshold": 0.5,
+      "val_summary": {
+        "threshold": 0.5,
+        "precision": 0.8535300316122234,
+        "recall": 0.7670454545454546,
+        "fpr": 0.012793961986285608
+      },
+      "btc_test": {
+        "rows": 94950,
+        "threshold": 0.5,
+        "precision": 0.5828013518588059,
+        "recall": 0.31429728635074927,
+        "fpr": 0.012342798737946052,
+        "auc_pr": 0.4529481483027559,
+        "auc_roc": 0.8568362198212462,
+        "tp": 1552,
+        "fp": 1111,
+        "tn": 88901,
+        "fn": 3386
+      },
+      "eth_test": {
+        "rows": 1478,
+        "threshold": 0.5,
+        "precision": 0.9283387622149837,
+        "recall": 0.8689024390243902,
+        "fpr": 0.019130434782608695,
+        "auc_pr": 0.9698195745687583,
+        "auc_roc": 0.989814422057264,
+        "tp": 285,
+        "fp": 22,
+        "tn": 1128,
+        "fn": 43
+      },
+      "combined_test": {
+        "rows": 96428,
+        "threshold": 0.5,
+        "precision": 0.6185185185185185,
+        "recall": 0.348841625522218,
+        "fpr": 0.01242842412408679,
+        "auc_pr": 0.49393168708762886,
+        "auc_roc": 0.8647535905850524,
+        "tp": 1837,
+        "fp": 1133,
+        "tn": 90029,
+        "fn": 3429
+      }
+    }
+  ]
+}

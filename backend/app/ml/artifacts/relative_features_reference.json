@@ -1,0 +1,97 @@
+{
+  "era_bin_edges": [
+    391199.999,
+    391211.0,
+    397248.0,
+    403305.0,
+    407341.0,
+    419425.0,
+    431520.0,
+    433544.0,
+    447655.0,
+    900000.0
+  ],
+  "train_max_block": 900000.0,
+  "metrics": {
+    "total_txs": {
+      "percentile_0.90": [
+        6.0,
+        2.0,
+        3.0,
+        2.0,
+        3.0,
+        2.0,
+        2.0,
+        2.0,
+        2783.8000000000006
+      ],
+      "median": [
+        2.0,
+        2.0,
+        2.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        24.0
+      ],
+      "mean": [
+        2.942679355783309,
+        1.8618932394779293,
+        1.9240909276415132,
+        1.71733267087799,
+        1.7561538213375487,
+        1.5797714047424987,
+        1.5667148014440433,
+        1.5096704629692028,
+        8171.233333333334
+      ],
+      "std": 5451.603971853786
+    },
+    "value_transacted_total": {
+      "percentile_0.90": [
+        4.973572210000002,
+        9.16949144,
+        48.64667156,
+        4.702029999999995,
+        1.257034018000004,
+        1.6790080280000015,
+        0.9741598380000003,
+        2.12263738,
+        96.966963598
+      ],
+      "median": [
+        0.123311215,
+        0.1676,
+        0.18001995999999998,
+        0.044033,
+        0.015769285,
+        0.019954,
+        0.015319895,
+        0.0299,
+        0.5392583
+      ],
+      "mean": [
+        19.834887499621523,
+        34.73869842970891,
+        38.00814808739788,
+        8.820345061933068,
+        10.038594509729329,
+        7.257931793717042,
+        5.031023263440794,
+        32.19920441424558,
+        199926.15115126866
+      ],
+      "std": 169979.23396789882
+    }
+  },
+  "fit_scope": "RECALIBRATED (Pass 2): historical bins keep the original 8 edges & bin structure; peer stats recomputed on Elliptic UNLABELED BTC census (btc_unlabeled.csv, 391200-487975, ~557k real addresses) so percentiles reflect real-address activity; one modern bin [447655-900000] appended from point-in-time modern census (artifacts/modern_era_address_census.json, harvest 2026-09-06T06:29:41.389490+00:00, born 841983-894823, n=60). Apply math identical to validated harness; fit population intentionally differs from training fit.",
+  "pass2_recalibration": {
+    "historical_bin_source": "data/processed/btc_unlabeled.csv",
+    "modern_bin_source": "artifacts/modern_era_address_census.json",
+    "modern_bin_high_edge": 900000.0,
+    "rebuilt_utc": "2026-09-06T06:31:54.645007+00:00",
+    "original_train_max_block": 447655.0
+  }
+}
