@@ -4,6 +4,8 @@ import { MOCK_CASES } from "@/lib/mock-data";
 import { useCorrelation } from "@/hooks/use-correlation";
 import { useCaseContext } from "@/store/case-context-store";
 import { WalletSelector } from "@/components/dashboard/WalletSelector";
+import { BackendOfflineBanner } from "@/components/shared/BackendOfflineBanner";
+import type { Chain } from "@/lib/api-types";
 
 export const Route = createFileRoute("/dashboard/signals")({
   component: NetworkSignals,
@@ -180,12 +182,23 @@ function NetworkGraph({
 function NetworkSignals() {
   const [view, setView] = useState<"tx" | "complaint">("tx");
   const navigate = useNavigate();
-  const { activeWallet, setActiveWallet } = useCaseContext();
+  const { activeWallet, activeChain, setActiveWallet } = useCaseContext();
+  const chainToUse = (activeChain || "ETH") as Chain;
 
-  // Use active wallet from context, or fallback to hardcoded
-  const walletToUse = activeWallet || "0x7A92B4C1demo";
+  const {
+    signal: sig,
+    linkedComplaints,
+    loading,
+    error,
+  } = useCorrelation(activeWallet, chainToUse);
 
-  const { signal: sig } = useCorrelation(walletToUse, "ETH");
+  const daysActive = (() => {
+    if (linkedComplaints.length === 0) return 0;
+    const earliest = Math.min(
+      ...linkedComplaints.map((c) => new Date(c.filed_at).getTime()),
+    );
+    return Math.max(0, Math.round((Date.now() - earliest) / 86_400_000));
+  })();
 
   return (
     <>
@@ -210,14 +223,35 @@ function NetworkSignals() {
           }}
         >
           <WalletSelector />
-          <span
-            className="ug-badge ug-badge--critical"
-            style={{ fontSize: "0.6rem", padding: "0.28rem 0.65rem" }}
-          >
-            Signal: {sig.signalStrength}
-          </span>
+          {sig && (
+            <span
+              className="ug-badge ug-badge--critical"
+              style={{ fontSize: "0.6rem", padding: "0.28rem 0.65rem" }}
+            >
+              Signal: {sig.signalStrength}
+            </span>
+          )}
         </div>
       </div>
+
+      {!activeWallet && (
+        <div className="ug-surface" style={{ padding: "1rem 1.25rem", marginBottom: "1rem" }}>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: "0.62rem", color: "var(--color-muted-foreground)" }}>
+            No wallet selected yet — trace a wallet or pick one from the selector above.
+          </p>
+        </div>
+      )}
+
+      {activeWallet && !sig && (
+        <div className="ug-surface" style={{ padding: "1rem 1.25rem", marginBottom: "1rem" }}>
+          {loading && !error && (
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: "0.62rem", color: "var(--color-muted-foreground)" }}>
+              Correlating…
+            </p>
+          )}
+          <BackendOfflineBanner error={error} context="network signal" />
+        </div>
+      )}
 
       <div
         style={{
@@ -230,6 +264,7 @@ function NetworkSignals() {
         {/* Left column */}
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           {/* Signal detection banner */}
+          {sig && (
           <div className="ug-surface ug-surface--critical">
             <div className="ug-panel-header">
               <div>
@@ -260,7 +295,7 @@ function NetworkSignals() {
               <button
                 className="ug-btn-primary"
                 onClick={() => {
-                  setActiveWallet(sig.wallet, "ETH");
+                  if (activeWallet) setActiveWallet(activeWallet, chainToUse);
                   navigate({ to: "/dashboard/investigation" });
                 }}
                 style={{
@@ -299,7 +334,7 @@ function NetworkSignals() {
                 },
                 {
                   label: "Days Active",
-                  value: sig.daysSinceFirst,
+                  value: daysActive,
                   color: "var(--color-foreground)",
                 },
               ].map((s, i) => (
@@ -371,6 +406,7 @@ function NetworkSignals() {
               </span>
             </div>
           </div>
+          )}
 
           {/* Graph panel */}
           <div className="ug-surface">

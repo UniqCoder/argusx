@@ -1,26 +1,44 @@
 // ============================================================
 // useWalletTrace + useWalletRisk
-// Falls back to MOCK_TRACE_* / MOCK_RISK_SIGNALS on error.
+// Real data only — no silent mock fallback on error or empty results.
+// Callers read `error`/`loading` and show their own state; node/edge
+// coordinates are placeholders (0,0) here, computed for real by
+// useForceLayout (src/hooks/use-force-layout.ts), not by this hook.
 // ============================================================
 import { useState, useEffect } from "react";
 import { getWalletTrace, getWalletRisk } from "@/lib/api";
 import type { Chain, TraceResponse, RiskResponse } from "@/lib/api-types";
-import {
-  MOCK_TRACE_NODES,
-  MOCK_TRACE_EDGES,
-  MOCK_RISK_SIGNALS,
-  type TraceNode,
-  type TraceEdge,
-  type RiskSignal,
-} from "@/lib/mock-data";
+import type { TraceNode, TraceEdge, RiskSignal } from "@/lib/mock-data";
 
-// Map raw hops from the API into the graph node/edge format the UI expects
+// Map raw hops from the API into the graph node/edge identity format the UI
+// expects. Positions (x/y) are 0 here — useForceLayout owns those.
 function hopsToGraph(
   hops: TraceResponse["path"],
   address: string,
 ): { nodes: TraceNode[]; edges: TraceEdge[] } {
-  if (hops.length === 0)
-    return { nodes: MOCK_TRACE_NODES, edges: MOCK_TRACE_EDGES };
+  if (hops.length === 0) {
+    // Real, empty result: the wallet was queried and no onward hops were
+    // found. Show it as a single unconnected node, not 7 mock nodes.
+    return {
+      nodes: [
+        {
+          id: "n0",
+          type: "reported",
+          label: "Searched wallet",
+          address:
+            address.length > 18
+              ? address.slice(0, 8) + "..." + address.slice(-4)
+              : address,
+          blockchain: "ETH",
+          riskScore: 0,
+          resolved: true,
+          x: 0,
+          y: 0,
+        },
+      ],
+      edges: [],
+    };
+  }
 
   // Build unique address list
   const addrList: string[] = [address];
@@ -37,7 +55,6 @@ function hopsToGraph(
     "bridge",
     "exchange",
   ];
-  const W = 160;
 
   const nodes: TraceNode[] = addrList.map((addr, i) => {
     const prevHop = hops[i - 1];
@@ -55,8 +72,8 @@ function hopsToGraph(
         addr.length > 18 ? addr.slice(0, 8) + "..." + addr.slice(-4) : addr,
       blockchain: (hops[0]?.chain ?? "ETH") as TraceNode["blockchain"],
       riskScore: i === addrList.length - 1 ? 88 : i === 1 ? 72 : 30,
-      x: 80 + i * W,
-      y: i % 2 === 0 ? 200 : 130,
+      x: 0,
+      y: 0,
       resolved: true,
     };
     if (prevHop != null) node.amount = `${prevHop.amount} ${prevHop.chain}`;
@@ -90,8 +107,8 @@ function hopsToGraph(
 
 // ── Trace hook ─────────────────────────────────────────────────────────────
 export function useWalletTrace(address: string | null, chain: Chain) {
-  const [nodes, setNodes] = useState<TraceNode[]>(MOCK_TRACE_NODES);
-  const [edges, setEdges] = useState<TraceEdge[]>(MOCK_TRACE_EDGES);
+  const [nodes, setNodes] = useState<TraceNode[]>([]);
+  const [edges, setEdges] = useState<TraceEdge[]>([]);
   const [vasp, setVasp] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,11 +122,9 @@ export function useWalletTrace(address: string | null, chain: Chain) {
     getWalletTrace(address, chain)
       .then((data) => {
         if (cancelled) return;
-        if (data.path.length > 0) {
-          const graph = hopsToGraph(data.path, address);
-          setNodes(graph.nodes);
-          setEdges(graph.edges);
-        }
+        const graph = hopsToGraph(data.path, address);
+        setNodes(graph.nodes);
+        setEdges(graph.edges);
         setVasp(data.nearest_vasp ?? null);
       })
       .catch((e) => {
@@ -130,9 +145,9 @@ export function useWalletTrace(address: string | null, chain: Chain) {
 
 // ── Risk hook ──────────────────────────────────────────────────────────────
 export function useWalletRisk(address: string | null, chain: Chain) {
-  const [riskScore, setRiskScore] = useState<number>(94);
-  const [riskTier, setRiskTier] = useState<string>("critical");
-  const [signals, setSignals] = useState<RiskSignal[]>(MOCK_RISK_SIGNALS);
+  const [riskScore, setRiskScore] = useState<number | null>(null);
+  const [riskTier, setRiskTier] = useState<string | null>(null);
+  const [signals, setSignals] = useState<RiskSignal[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -147,23 +162,21 @@ export function useWalletRisk(address: string | null, chain: Chain) {
         if (cancelled) return;
         setRiskScore(Math.round(data.risk_score * 100));
         setRiskTier(data.risk_tier);
-        if (data.evidence.length > 0) {
-          setSignals(
-            data.evidence.map((ev, i) => ({
-              id: `ev${i}`,
-              label: ev.feature_name
-                .replace(/_/g, " ")
-                .replace(/\b\w/g, (c) => c.toUpperCase()),
-              contribution: Math.max(
-                1,
-                Math.round(Math.abs(ev.contribution) * 30),
-              ),
-              evidence: `SHAP: ${ev.contribution.toFixed(3)} (${ev.direction.replace(/_/g, " ")})`,
-              dataSource: "XGBoost / Elliptic++ Dataset",
-              detail: `Feature "${ev.feature_name}" ${ev.direction.replace(/_/g, " ")} the risk score.`,
-            })),
-          );
-        }
+        setSignals(
+          data.evidence.map((ev, i) => ({
+            id: `ev${i}`,
+            label: ev.feature_name
+              .replace(/_/g, " ")
+              .replace(/\b\w/g, (c) => c.toUpperCase()),
+            contribution: Math.max(
+              1,
+              Math.round(Math.abs(ev.contribution) * 30),
+            ),
+            evidence: `SHAP: ${ev.contribution.toFixed(3)} (${ev.direction.replace(/_/g, " ")})`,
+            dataSource: "XGBoost / Elliptic++ Dataset",
+            detail: `Feature "${ev.feature_name}" ${ev.direction.replace(/_/g, " ")} the risk score.`,
+          })),
+        );
       })
       .catch((e) => {
         if (!cancelled)

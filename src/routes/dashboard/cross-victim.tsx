@@ -2,8 +2,10 @@
 import { useState } from "react";
 import { useCorrelation } from "@/hooks/use-correlation";
 import { useCaseContext } from "@/store/case-context-store";
+import { BackendOfflineBanner } from "@/components/shared/BackendOfflineBanner";
+import { truncateAddress } from "@/lib/address";
 import { MOCK_CASES } from "@/lib/mock-data";
-import type { Chain } from "@/lib/api-types";
+import type { Chain, Complaint } from "@/lib/api-types";
 
 export const Route = createFileRoute("/dashboard/cross-victim")({
   component: CrossVictim,
@@ -63,7 +65,22 @@ function CrossVictim() {
     "BTC" | "ETH" | "TRON" | "BSC" | "Polygon"
   >("ETH");
 
-  const { signal: sig, loading, error } = useCorrelation(wallet, chain as Chain);
+  const {
+    signal: sig,
+    linkedComplaints,
+    loading,
+    error,
+  } = useCorrelation(wallet, chain as Chain);
+
+  // Real, derived from actual complaint filing dates — not a fabricated
+  // constant. Falls back to 0 when there's nothing to derive it from yet.
+  const daysActive = (() => {
+    if (linkedComplaints.length === 0) return 0;
+    const earliest = Math.min(
+      ...linkedComplaints.map((c) => new Date(c.filed_at).getTime()),
+    );
+    return Math.max(0, Math.round((Date.now() - earliest) / 86_400_000));
+  })();
 
   const handleSearch = () => {
     const trimmed = input.trim();
@@ -95,14 +112,11 @@ function CrossVictim() {
   };
 
   const sigColor =
-    sig.signalStrength === "HIGH"
+    sig?.signalStrength === "HIGH"
       ? "var(--color-signal)"
-      : sig.signalStrength === "MEDIUM"
+      : sig?.signalStrength === "MEDIUM"
         ? "var(--color-primary)"
         : "var(--color-accent)";
-
-  // Victim rows: use as many mock cases as the correlation returned
-  const victimRows = MOCK_CASES.slice(0, Math.max(sig.complaints, 1));
 
   return (
     <>
@@ -112,12 +126,16 @@ function CrossVictim() {
           <p className="ug-page-header__kicker">Intelligence</p>
           <h1 className="ug-page-header__title">Cross-Victim Correlation</h1>
           <p className="ug-page-header__sub">
-            {wallet
+            {sig
               ? `${sig.victims} victims · ${sig.complaints} complaints · ${sig.states} states — signal: ${sig.signalStrength}`
-              : "One wallet. Many targets. Paste an address to surface every linked victim."}
+              : wallet && loading
+                ? "Correlating…"
+                : wallet && error
+                  ? "Couldn't reach the backend — see below."
+                  : "One wallet. Many targets. Paste an address to surface every linked victim."}
           </p>
         </div>
-        {wallet && (
+        {sig && (
           <span
             className="ug-badge ug-badge--critical"
             style={{
@@ -242,7 +260,7 @@ function CrossVictim() {
                   transition: "all 0.12s",
                 }}
               >
-                {p.addr}
+                {truncateAddress(p.addr)}
               </button>
             ))}
           </div>
@@ -422,8 +440,20 @@ function CrossVictim() {
         </div>
       )}
 
+      {/* ── Loading / offline states (wallet searched, no result yet) ── */}
+      {wallet && !sig && (
+        <div className="ug-surface" style={{ padding: "1rem 1.25rem", marginBottom: "0.75rem" }}>
+          {loading && !error && (
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: "0.62rem", color: "var(--color-muted-foreground)" }}>
+              Correlating…
+            </p>
+          )}
+          <BackendOfflineBanner error={error} context="cross-victim correlation" />
+        </div>
+      )}
+
       {/* ── Results ── */}
-      {wallet && (
+      {wallet && sig && (
         <>
           {/* Summary stat strip */}
           <div className="ug-stat-strip" style={{ marginBottom: "0.75rem" }}>
@@ -450,7 +480,7 @@ function CrossVictim() {
               },
               {
                 label: "Days Active",
-                value: `${sig.daysSinceFirst}d`,
+                value: `${daysActive}d`,
                 accent: "var(--color-muted-foreground)",
               },
             ].map((s) => (
@@ -537,18 +567,30 @@ function CrossVictim() {
               </div>
 
               {/* Rows */}
-              {victimRows.map((c, i) => (
+              {linkedComplaints.length === 0 && (
+                <p
+                  style={{
+                    padding: "1rem 1.25rem",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "0.62rem",
+                    color: "var(--color-muted-foreground)",
+                  }}
+                >
+                  No linked complaints found for this wallet.
+                </p>
+              )}
+              {linkedComplaints.map((c: Complaint, i) => (
                 <div
                   key={c.id}
                   onClick={() => {
+                    if (!wallet) return;
                     setActiveCase({
                       caseId: c.id,
-                      caseNumber: c.id,
-                      wallet: c.reportedWallet,
-                      chain: c.blockchain as
-                        "BTC" | "ETH" | "TRON" | "BSC" | "Polygon",
-                      fraudType: c.fraudType,
-                      status: c.traceStatus,
+                      caseNumber: c.ncrp_ref ?? c.id,
+                      wallet,
+                      chain,
+                      ...(c.fraud_typology ? { fraudType: c.fraud_typology } : {}),
+                      status: "investigating",
                     });
                     navigate({ to: "/dashboard/investigation" });
                   }}
@@ -557,7 +599,7 @@ function CrossVictim() {
                     gridTemplateColumns: "88px 1fr 90px 100px 100px",
                     padding: "0.7rem 1.25rem",
                     borderBottom:
-                      i < victimRows.length - 1
+                      i < linkedComplaints.length - 1
                         ? "1px solid var(--border-subtle)"
                         : "none",
                     alignItems: "center",
@@ -578,7 +620,7 @@ function CrossVictim() {
                       color: "var(--color-accent)",
                     }}
                   >
-                    {c.id.slice(-5)}
+                    {(c.ncrp_ref ?? c.id).slice(-5)}
                   </span>
                   <div>
                     <p
@@ -589,7 +631,7 @@ function CrossVictim() {
                         marginBottom: "0.15rem",
                       }}
                     >
-                      {c.fraudType}
+                      {c.fraud_typology ?? "Unclassified"}
                     </p>
                     <p
                       style={{
@@ -598,9 +640,9 @@ function CrossVictim() {
                         color: "var(--color-muted-foreground)",
                       }}
                     >
-                      {c.description.length > 52
-                        ? c.description.slice(0, 52) + "…"
-                        : c.description}
+                      {(c.narrative_text ?? "No narrative on file").length > 52
+                        ? (c.narrative_text ?? "").slice(0, 52) + "…"
+                        : (c.narrative_text ?? "No narrative on file")}
                     </p>
                   </div>
                   <span
@@ -610,7 +652,9 @@ function CrossVictim() {
                       color: "var(--color-primary)",
                     }}
                   >
-                    {GEO_DATA[i % GEO_DATA.length]?.amount ?? "—"}
+                    {c.amount_lost != null
+                      ? `₹${c.amount_lost.toLocaleString("en-IN")}`
+                      : "—"}
                   </span>
                   <span
                     style={{
@@ -619,19 +663,13 @@ function CrossVictim() {
                       color: "var(--color-muted-foreground)",
                     }}
                   >
-                    {GEO_DATA[i % GEO_DATA.length]?.state ?? "—"}
+                    {c.state ?? "—"}
                   </span>
                   <span
-                    className={`ug-badge ${
-                      c.traceStatus === "critical"
-                        ? "ug-badge--critical"
-                        : c.traceStatus === "live-trace"
-                          ? "ug-badge--live"
-                          : "ug-badge--medium"
-                    }`}
+                    className="ug-badge ug-badge--medium"
                     style={{ fontSize: "0.5rem", justifySelf: "start" }}
                   >
-                    {c.traceStatus}
+                    {c.source_platform}
                   </span>
                 </div>
               ))}
@@ -687,7 +725,7 @@ function CrossVictim() {
                     { k: "Complaints", v: String(sig.complaints) },
                     { k: "States", v: String(sig.states) },
                     { k: "Funds at Risk", v: sig.totalFundsAtRisk },
-                    { k: "Days Active", v: `${sig.daysSinceFirst}d` },
+                    { k: "Days Active", v: `${daysActive}d` },
                   ].map(({ k, v }) => (
                     <div key={k} className="ug-data-row">
                       <span className="ug-data-row__key">{k}</span>

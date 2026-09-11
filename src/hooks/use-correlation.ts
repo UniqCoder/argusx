@@ -1,13 +1,20 @@
 // ============================================================
 // useCorrelation — POST /api/v1/correlate
-// Falls back to MOCK_NETWORK_SIGNAL on error.
+// Real data only — no silent mock fallback. `signal` is null until a real
+// result arrives; callers show their own loading/empty/error state.
 // ============================================================
 import { useState, useEffect } from "react";
 import { correlate } from "@/lib/api";
-import type { Chain } from "@/lib/api-types";
-import { MOCK_NETWORK_SIGNAL } from "@/lib/mock-data";
+import type { Chain, Complaint } from "@/lib/api-types";
 
-export type NetworkSignal = typeof MOCK_NETWORK_SIGNAL;
+export interface NetworkSignal {
+  wallet: string;
+  signalStrength: "HIGH" | "MEDIUM" | "LOW";
+  victims: number;
+  complaints: number;
+  states: number;
+  totalFundsAtRisk: string;
+}
 
 function formatInr(n: number): string {
   if (n >= 1e7) return `₹${(n / 1e7).toFixed(1)}Cr`;
@@ -16,7 +23,8 @@ function formatInr(n: number): string {
 }
 
 export function useCorrelation(address: string | null, chain: Chain) {
-  const [signal, setSignal] = useState<NetworkSignal>(MOCK_NETWORK_SIGNAL);
+  const [signal, setSignal] = useState<NetworkSignal | null>(null);
+  const [linkedComplaints, setLinkedComplaints] = useState<Complaint[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,18 +46,17 @@ export function useCorrelation(address: string | null, chain: Chain) {
 
         setSignal({
           wallet: address.slice(0, 10) + "..." + address.slice(-4),
-          signalStrength: strength as "HIGH",
+          signalStrength: strength,
           victims: count,
           complaints: count,
           states: states > 0 ? states : data.distinct_geographies,
-          daysSinceFirst: 12,
           totalFundsAtRisk: formatInr(data.total_amount),
         });
+        setLinkedComplaints(data.linked_complaints);
       })
       .catch((e) => {
         if (!cancelled)
           setError(e instanceof Error ? e.message : "Correlation failed");
-        // Keep MOCK_NETWORK_SIGNAL
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -60,5 +67,5 @@ export function useCorrelation(address: string | null, chain: Chain) {
     };
   }, [address, chain]);
 
-  return { signal, loading, error };
+  return { signal, linkedComplaints, loading, error };
 }

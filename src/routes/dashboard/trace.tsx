@@ -17,43 +17,50 @@ const CHAIN_META: Record<Chain, { symbol: string; color: string }> = {
   Polygon: { symbol: "MATIC", color: "oklch(0.72 0.18 290)" },
 };
 
+// Real addresses, verified against the live backend — these actually trace,
+// unlike display-truncated mock strings (which contain a literal "..." and
+// get rejected by the blockchain explorer as malformed).
 const EXAMPLES = [
   {
-    label: "ETH � High Risk",
-    addr: "0x7A92...B4C1",
+    label: "ETH — Live Trace",
+    addr: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
     chain: "Ethereum" as Chain,
-    badge: "ug-badge--critical",
+    badge: "ug-badge--live",
   },
   {
-    label: "TRON � Live Trace",
-    addr: "TXqA8...72Bc",
+    label: "TRON — Live Trace",
+    addr: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
     chain: "TRON" as Chain,
     badge: "ug-badge--live",
   },
   {
-    label: "BTC � Evidence Ready",
-    addr: "1A1z...mXVf",
+    label: "BTC — Live Trace",
+    addr: "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
     chain: "Bitcoin" as Chain,
-    badge: "ug-badge--medium",
+    badge: "ug-badge--live",
   },
 ];
+
+// The backend only traces these three chains today — BSC/Polygon are UI
+// options with no backend support yet, not silently-wrong data.
+const BACKEND_SUPPORTED = new Set(["BTC", "ETH", "TRON"]);
 
 function TraceWallet() {
   const [address, setAddress] = useState("");
   const [chain, setChain] = useState<Chain>("Ethereum");
-  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { setActiveWallet } = useCaseContext();
 
+  const chainSymbol = CHAIN_META[chain].symbol as
+    "BTC" | "ETH" | "TRON" | "BSC" | "Polygon";
+  const chainSupported = BACKEND_SUPPORTED.has(chainSymbol);
+
   const handleTrace = () => {
-    if (!address.trim()) return;
-    setLoading(true);
-    // Map Chain name to blockchain symbol
-    const chainSymbol = CHAIN_META[chain].symbol as
-      "BTC" | "ETH" | "TRON" | "BSC" | "Polygon";
-    // Set context from trace input
+    if (!address.trim() || !chainSupported) return;
+    // Set context from trace input, then navigate straight to the results
+    // page — it fetches the real trace itself, no fake loading delay here.
     setActiveWallet(address, chainSymbol);
-    setTimeout(() => navigate({ to: "/dashboard/investigation" }), 1200);
+    navigate({ to: "/dashboard/investigation" });
   };
 
   return (
@@ -195,11 +202,25 @@ function TraceWallet() {
             </div>
           </div>
 
+          {!chainSupported && (
+            <p
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: "0.68rem",
+                color: "var(--color-destructive, oklch(0.65 0.2 25))",
+                marginTop: "0.6rem",
+              }}
+            >
+              {CHAIN_META[chain].symbol} tracing isn't supported by the
+              backend yet — only BTC, ETH, and TRON are live.
+            </p>
+          )}
+
           {/* CTA */}
           <button
             className="ug-btn-primary"
             onClick={handleTrace}
-            disabled={!address.trim() || loading}
+            disabled={!address.trim() || !chainSupported}
             style={{
               width: "100%",
               justifyContent: "center",
@@ -207,26 +228,7 @@ function TraceWallet() {
               padding: "0.85rem",
             }}
           >
-            {loading ? (
-              <span
-                style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}
-              >
-                <span
-                  style={{
-                    width: "0.85rem",
-                    height: "0.85rem",
-                    border: "2px solid oklch(0.18 0.03 60 / 40%)",
-                    borderTopColor: "oklch(0.18 0.03 60)",
-                    borderRadius: "3px",
-                    animation: "spin 0.65s linear infinite",
-                    display: "inline-block",
-                  }}
-                />
-                Initiating trace�
-              </span>
-            ) : (
-              "START TRACE ?"
-            )}
+            START TRACE &rarr;
           </button>
         </div>
       </div>
@@ -280,7 +282,9 @@ function TraceWallet() {
                   letterSpacing: "0.04em",
                 }}
               >
-                {ex.addr}
+                {ex.addr.length > 14
+                  ? `${ex.addr.slice(0, 6)}...${ex.addr.slice(-4)}`
+                  : ex.addr}
               </span>
               <span
                 style={{
