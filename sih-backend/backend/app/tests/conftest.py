@@ -7,6 +7,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.api.v1.routers.auth import reset_login_rate_limit_state
 from app.api.v1.routers.check_wallet import get_redis
 from app.db.session import Base, get_db
 from app.main import app as fastapi_app
@@ -86,6 +87,11 @@ async def client(db_session: AsyncSession, fake_redis: FakeRedis) -> AsyncGenera
 
     fastapi_app.dependency_overrides[get_db] = _override_get_db
     fastapi_app.dependency_overrides[get_redis] = _override_get_redis
+    # The in-memory login rate limiter is keyed by client IP, which the test
+    # transport reuses for every test — reset it per test so unrelated tests
+    # (many of which call /auth/login via the auth_headers fixture) don't
+    # accumulate attempts and trip 429 on each other. See auth.py.
+    reset_login_rate_limit_state()
 
     async with AsyncClient(
         transport=ASGITransport(app=fastapi_app),

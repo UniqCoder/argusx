@@ -15,7 +15,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.deps import CurrentUserDep
+from app.api.v1.deps import CurrentUserDep, InvestigatorOrAdminDep
 from app.db.session import get_db
 from app.schemas.case import CaseCreate, CasePatch, CaseRead
 from app.schemas.common import CaseStatus, ErrorEnvelope, PaginatedResponse
@@ -39,7 +39,7 @@ router = APIRouter(prefix="/cases", tags=["cases"])
 )
 async def create_case(
     payload: CaseCreate,
-    current_user: CurrentUserDep,
+    current_user: InvestigatorOrAdminDep,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> CaseRead:
     """Create a new case file and link initial suspect wallet IDs."""
@@ -150,7 +150,7 @@ async def get_case(
 async def update_case(
     id: Annotated[UUID, Path(description="Case UUID")],
     patch: CasePatch,
-    current_user: CurrentUserDep,
+    current_user: InvestigatorOrAdminDep,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> CaseRead:
     """
@@ -186,7 +186,7 @@ async def update_case(
 )
 async def get_case_report(
     id: Annotated[UUID, Path(description="Case UUID to generate report for")],
-    current_user: CurrentUserDep,
+    current_user: InvestigatorOrAdminDep,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     """

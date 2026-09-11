@@ -10,7 +10,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.deps import CurrentUserDep
+from app.api.v1.deps import InvestigatorOrAdminDep
 from app.db.session import get_db
 from app.schemas.common import ErrorEnvelope
 from app.schemas.correlate import CorrelateRequest, CorrelateResponse
@@ -34,7 +34,7 @@ router = APIRouter(prefix="/correlate", tags=["correlation"])
 )
 async def correlate_wallet(
     body: CorrelateRequest,
-    current_user: CurrentUserDep,
+    current_user: InvestigatorOrAdminDep,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> CorrelateResponse:
     """

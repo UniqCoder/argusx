@@ -9,3 +9,4 @@ from app.models.wallet import Wallet  # noqa: F401
 from app.models.case import Case, CaseWallet  # noqa: F401
 from app.models.alert import Alert  # noqa: F401
 from app.models.audit import AuditLog  # noqa: F401
+from app.models.engine import Anchor, Trace, TaintNode, EvidenceLedgerEntry, Decision  # noqa: F401

@@ -14,7 +14,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.deps import CurrentUserDep
+from app.api.v1.deps import CurrentUserDep, InvestigatorOrAdminDep
 from app.db.session import get_db
 from app.schemas.common import ErrorEnvelope, PaginatedResponse
 from app.schemas.complaint import ComplaintCreate, ComplaintDetailRead, ComplaintRead
@@ -38,7 +38,7 @@ router = APIRouter(prefix="/complaints", tags=["complaints"])
 )
 async def create_complaint(
     body: ComplaintCreate,
-    current_user: CurrentUserDep,
+    current_user: InvestigatorOrAdminDep,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ComplaintRead:
     """

@@ -34,6 +34,7 @@ from app.api.v1.routers.correlate import router as correlate_router
 from app.api.v1.routers.check_wallet import router as check_wallet_router
 from app.api.v1.routers.cases import router as cases_router
 from app.api.v1.routers.alerts import router as alerts_router
+from app.api.v1.routers.engine import anchors_router, engine_router
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -236,6 +237,11 @@ app.include_router(wallets_router, prefix=V1)
 app.include_router(correlate_router, prefix=V1)
 app.include_router(cases_router, prefix=V1)
 app.include_router(alerts_router, prefix=V1)
+
+# ARGUS v2 provenance engine (additive — see ARGUS-ENGINE-V2.md).
+# anchors_router -> /api/v1/anchors, engine_router -> /api/v1/engine/*
+app.include_router(anchors_router, prefix=V1)
+app.include_router(engine_router, prefix=V1)
 
 # VASP check-wallet — mounted at root /check-wallet (not /api/v1/)
 # Uses X-API-Key auth, NOT JWT — see openapi.yaml for the security scheme split.

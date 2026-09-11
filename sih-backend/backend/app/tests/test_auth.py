@@ -86,3 +86,23 @@ async def test_jwt_protected_routes_reject_vasp_api_key(client: AsyncClient, vas
     )
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "UNAUTHORIZED"
+
+
+@pytest.mark.asyncio
+async def test_login_rate_limit_blocks_after_threshold(client: AsyncClient):
+    """
+    Pins the brute-force throttle added to /auth/login (app/api/v1/routers/
+    auth.py::_enforce_login_rate_limit) — previously the endpoint accepted an
+    unlimited number of password guesses from the same client.
+    """
+    for _ in range(10):
+        resp = await client.post(
+            "/api/v1/auth/login", json={"email": "attacker@example.com", "password": "guess"},
+        )
+        assert resp.status_code == 401
+
+    blocked = await client.post(
+        "/api/v1/auth/login", json={"email": "attacker@example.com", "password": "guess"},
+    )
+    assert blocked.status_code == 429
+    assert blocked.json()["error"]["code"] == "TOO_MANY_ATTEMPTS"
