@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { CaseStatus } from "@/lib/mock-data";
 import { useCases } from "@/hooks/use-cases";
 import { useCaseContext } from "@/store/case-context-store";
+import { truncateAddress } from "@/lib/address";
 
 export const Route = createFileRoute("/dashboard/cases")({
   component: Cases,
@@ -222,7 +223,7 @@ function Cases() {
                   letterSpacing: "0.04em",
                 }}
               >
-                {c.reportedWallet}
+                {truncateAddress(c.reportedWallet)}
               </p>
             </div>
 

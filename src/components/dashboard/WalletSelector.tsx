@@ -1,5 +1,6 @@
 import { useCaseContext } from "@/store/case-context-store";
 import { MOCK_CASES } from "@/lib/mock-data";
+import { truncateAddress } from "@/lib/address";
 import { useState } from "react";
 
 export function WalletSelector() {
@@ -7,9 +8,7 @@ export function WalletSelector() {
   const [isOpen, setIsOpen] = useState(false);
 
   // Get wallets from mock cases — only use fields that exist on InvestigationCase
-  const wallets = Array.from(
-    new Set(MOCK_CASES.map((c) => c.reportedWallet)),
-  ).map((w) => w.replace("...", ""));
+  const wallets = Array.from(new Set(MOCK_CASES.map((c) => c.reportedWallet)));
 
   const handleWalletSelect = (wallet: string) => {
     // Use current chain, or default to ETH if no chain is set
@@ -99,7 +98,7 @@ export function WalletSelector() {
                     : "var(--color-muted-foreground)";
               }}
             >
-              {wallet}
+              {truncateAddress(wallet)}
             </button>
           ))}
         </div>
