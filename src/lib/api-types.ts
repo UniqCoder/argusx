@@ -87,12 +87,23 @@ export interface ComplaintDetail extends Complaint {
   extracted_entities?: ExtractedEntities | null;
 }
 
+export interface CaseWallet {
+  id: string;
+  address: string;
+  chain: string;
+  risk_score?: number | null;
+  risk_tier?: RiskTier | null;
+  first_seen?: string | null;
+  last_seen?: string | null;
+}
+
 export interface Case {
   id: string;
   status: CaseStatus;
   assigned_investigator?: string | null;
   opened_at: string;
   closed_at?: string | null;
+  wallets: CaseWallet[];
 }
 
 export interface Alert {

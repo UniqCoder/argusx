@@ -25,21 +25,23 @@ const LABEL_MAP: Record<CaseStatus, string> = {
   closed: "Closed",
 };
 
-// The backend Case model doesn't carry fraud type / wallet / risk score
-// directly — those live on the Wallet/Complaint it's linked to, which this
-// list endpoint doesn't join. Rather than fabricate plausible-looking
-// values, surface only what the API actually returns and mark the rest
-// as genuinely unknown.
+// The backend Case model doesn't carry fraud type or victim count directly
+// (those live on the Complaint, which this list endpoint doesn't join) —
+// left genuinely unknown rather than fabricated. Wallet/chain/risk DO come
+// from the API's real `wallets` join: the first linked wallet, when one
+// exists.
 function mapCase(c: Case): InvestigationCase {
+  const wallet = c.wallets[0];
   return {
     id: `UG-${c.id.slice(0, 8).toUpperCase()}`,
     rawId: c.id,
     fraudType: "Unclassified",
-    blockchain: "ETH",
-    reportedWallet: "",
+    blockchain: (wallet?.chain as InvestigationCase["blockchain"]) ?? "ETH",
+    reportedWallet: wallet?.address ?? "",
     traceStatus: STATUS_MAP[c.status] ?? "live-trace",
     networkSignal: "NONE",
-    riskScore: 0,
+    riskScore:
+      wallet?.risk_score != null ? Math.round(wallet.risk_score * 100) : 0,
     victimCount: 0,
     lastActivity: new Date(c.opened_at).toLocaleDateString("en-IN"),
     description: `Case opened by ${c.assigned_investigator ?? "unassigned"}. Status: ${c.status}.`,

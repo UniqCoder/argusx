@@ -44,6 +44,12 @@ export interface CaseContext {
     status?: string;
   }) => void;
 
+  // Records a wallet into the "recently searched" history without touching
+  // activeWallet/activeChain — for lookups (e.g. Cross-Victim's own search
+  // box) that shouldn't silently change what the rest of the app considers
+  // "the active investigation."
+  recordRecentWallet: (wallet: string) => void;
+
   clearContext: () => void;
 
   // Getters
@@ -88,6 +94,9 @@ export const useCaseContext = create<CaseContext>((set, get) => ({
       activeFraudType: params.fraudType || null,
       activeCaseStatus: params.status || null,
     }),
+
+  recordRecentWallet: (wallet) =>
+    set((state) => ({ recentWallets: pushRecent(state.recentWallets, wallet) })),
 
   clearContext: () =>
     set({

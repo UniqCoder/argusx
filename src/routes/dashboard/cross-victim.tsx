@@ -33,7 +33,8 @@ const NODE_C: Record<string, string> = {
 // ── Page ─────────────────────────────────────────────────────────────────
 function CrossVictim() {
   const navigate = useNavigate();
-  const { setActiveWallet, recentWallets } = useCaseContext();
+  const { setActiveWallet, recentWallets, recordRecentWallet } =
+    useCaseContext();
 
   const [input, setInput] = useState("");
   const [wallet, setWallet] = useState<string | null>(null);
@@ -62,6 +63,7 @@ function CrossVictim() {
     const trimmed = input.trim();
     if (!trimmed) return;
     setWallet(trimmed);
+    recordRecentWallet(trimmed);
   };
 
   const handlePreset = (addr: string) => {
