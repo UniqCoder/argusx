@@ -7,10 +7,13 @@ import type {
   LoginRequest,
   LoginResponse,
   RefreshResponse,
-  TraceResponse,
   RiskResponse,
   DepositCheckRequest,
   DepositCheckResponse,
+  AnchorCreate,
+  AnchorRead,
+  EngineTraceRequest,
+  EngineTraceResult,
   CorrelateRequest,
   CorrelateResponse,
   Paginated,
@@ -157,15 +160,12 @@ export function getHealth(): Promise<HealthResponse> {
 }
 
 // ── Wallets ────────────────────────────────────────────────────────────────
-export function getWalletTrace(
-  address: string,
-  chain: Chain,
-): Promise<TraceResponse> {
-  return request<TraceResponse>(
-    `/api/v1/wallets/${encodeURIComponent(address)}/trace?chain=${chain}`,
-  );
-}
-
+// Note: the v1 GET /wallets/{address}/trace endpoint is intentionally not
+// wrapped here anymore — it only lists an address's own direct transactions
+// (no real multi-hop, no real mixer/bridge/VASP classification) and the
+// frontend now routes wallet tracing through the real v2 provenance engine
+// (createAnchor + runEngineTrace below). The v1 route itself still exists
+// server-side for report_service.py's internal use and its own tests.
 export function getWalletRisk(
   address: string,
   chain: Chain,
@@ -173,6 +173,23 @@ export function getWalletRisk(
   return request<RiskResponse>(
     `/api/v1/wallets/${encodeURIComponent(address)}/risk?chain=${chain}`,
   );
+}
+
+// ── Provenance engine (v2) ─────────────────────────────────────────────────
+export function createAnchor(body: AnchorCreate): Promise<AnchorRead> {
+  return request<AnchorRead>("/api/v1/anchors", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function runEngineTrace(
+  body: EngineTraceRequest,
+): Promise<EngineTraceResult> {
+  return request<EngineTraceResult>("/api/v1/engine/trace", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export function checkDeposit(

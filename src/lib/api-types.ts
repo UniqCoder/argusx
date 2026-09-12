@@ -32,27 +32,6 @@ export interface Paginated<T> {
 }
 
 // ── Core entities ──────────────────────────────────────────────────────────
-export interface Wallet {
-  id: string;
-  address: string;
-  chain: Chain;
-  risk_score?: number;
-  risk_tier?: RiskTier;
-  vasp_identified?: string | null;
-  cluster_id?: string | null;
-  first_seen?: string | null;
-  last_seen?: string | null;
-}
-
-export interface Hop {
-  from_address: string;
-  to_address: string;
-  tx_hash: string;
-  amount: number;
-  chain: Chain;
-  timestamp: string;
-}
-
 export interface RiskEvidence {
   feature_name: string;
   contribution: number;
@@ -133,18 +112,92 @@ export interface RefreshResponse {
 }
 
 // ── Wallet endpoints ───────────────────────────────────────────────────────
-export interface TraceResponse {
-  wallet: Wallet;
-  path: Hop[];
-  nearest_vasp?: string | null;
-  hops_count: number;
-  traced_at: string;
-}
-
 export interface RiskResponse {
   risk_score: number;
   risk_tier: RiskTier;
   evidence: RiskEvidence[];
+}
+
+// ── Provenance engine (v2) — anchors + taint-propagation trace ─────────────
+export type AttestationClass = "A" | "B" | "C";
+export type AttestationType =
+  | "LEGAL_COMPLAINT"
+  | "SOVEREIGN_DESIGNATION"
+  | "PUBLIC_ATTRIBUTED_REPORT"
+  | "INVESTIGATOR_ASSERTED";
+export type TaintMethod = "haircut" | "poison" | "fifo";
+export type TerminalKind =
+  | "VASP"
+  | "MIXER_BOUNDARY"
+  | "BRIDGE"
+  | "DUST"
+  | "DEPTH_LIMIT"
+  | "NODE_LIMIT";
+export type DecisionAction = "monitor" | "hold_for_review" | "block";
+
+export interface AnchorCreate {
+  address: string;
+  chain: Chain;
+  attestation_class: AttestationClass;
+  attestation_type: AttestationType;
+  source_ref: string;
+  asserted_by: string;
+  victim_amount_inr?: number | null;
+  evidence_uri?: string | null;
+}
+
+export interface AnchorRead {
+  id: string;
+  address: string;
+  chain: Chain;
+  attestation_class: AttestationClass;
+  attestation_type: string;
+  source_ref: string;
+  asserted_by: string;
+  asserted_at: string;
+  victim_amount_inr?: number | null;
+  evidence_uri?: string | null;
+  created_at: string;
+}
+
+export interface EngineTraceRequest {
+  anchor_id: string;
+  method?: TaintMethod;
+  max_hops?: number;
+  max_nodes?: number;
+  dilution_floor?: number;
+}
+
+export interface TaintNodeRead {
+  address: string;
+  chain: Chain;
+  hop: number;
+  taint_fraction: number;
+  tainted_value: number;
+  tainted_inr?: number | null;
+  terminal_kind?: TerminalKind | null;
+  entity_name?: string | null;
+  entity_jurisdiction?: string | null;
+  proof_path: string[];
+  still_active: boolean;
+  parent_address?: string | null;
+  tx_hash?: string | null;
+  tx_amount?: number | null;
+}
+
+export interface EngineTraceResult {
+  trace_id: string;
+  anchor: AnchorRead;
+  method: TaintMethod;
+  dilution_floor: number;
+  max_hops: number;
+  node_count: number;
+  nodes: TaintNodeRead[];
+  terminals: TaintNodeRead[];
+  unattributed_residual: number;
+  terminated_at_mixer: number;
+  reproducible_hash: string;
+  completed_at: string;
 }
 
 // ── Deposit check ──────────────────────────────────────────────────────────
