@@ -1,11 +1,12 @@
 // ============================================================
 // useAlerts — polls GET /api/v1/alerts every 5 seconds
-// Falls back to MOCK_EVENTS when backend unreachable.
+// Real data only — a genuine empty result stays empty; no mock
+// fallback on error or on zero alerts.
 // ============================================================
 import { useState, useEffect } from "react";
 import { listAlerts } from "@/lib/api";
 import type { Alert } from "@/lib/api-types";
-import { MOCK_EVENTS, type IntelEvent } from "@/lib/mock-data";
+import type { IntelEvent } from "@/lib/mock-data";
 
 const SEV_MAP: Record<string, IntelEvent["severity"]> = {
   block: "CRITICAL",
@@ -33,7 +34,7 @@ function mapAlert(a: Alert): IntelEvent {
 }
 
 export function useAlerts() {
-  const [events, setEvents] = useState<IntelEvent[]>(MOCK_EVENTS);
+  const [events, setEvents] = useState<IntelEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -43,15 +44,14 @@ export function useAlerts() {
       try {
         const data = await listAlerts({ resolved: false });
         if (!cancelled) {
-          setEvents(
-            data.items.length > 0 ? data.items.map(mapAlert) : MOCK_EVENTS,
-          );
+          setEvents(data.items.map(mapAlert));
           setError(null);
         }
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "Failed to load alerts");
-          // Keep current events (mock data) on error — don't blank the feed
+          // Keep whatever real events are already on screen — don't wipe
+          // them, but never substitute mock data for a real failure.
         }
       }
     };

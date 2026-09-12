@@ -1,8 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { COMMAND_CENTER_STATS } from "@/lib/mock-data";
 import type { IntelEvent } from "@/lib/mock-data";
 import { useAlerts } from "@/hooks/use-alerts";
 import { useCases } from "@/hooks/use-cases";
+import { useHealth } from "@/hooks/use-health";
 
 export const Route = createFileRoute("/dashboard/")({
   component: CommandCenter,
@@ -30,6 +30,7 @@ function CommandCenter() {
   const navigate = useNavigate();
   const { events } = useAlerts();
   const { allCases } = useCases();
+  const { isLive } = useHealth();
   const criticalCount = allCases.filter(
     (c) => c.traceStatus === "critical",
   ).length;
@@ -37,25 +38,19 @@ function CommandCenter() {
   const stats = [
     {
       label: "Active Cases",
-      value:
-        allCases.filter((c) => c.traceStatus !== "closed").length ||
-        COMMAND_CENTER_STATS.activeCases,
+      value: allCases.filter((c) => c.traceStatus !== "closed").length,
     },
     {
       label: "Live Traces",
-      value:
-        allCases.filter((c) => c.traceStatus === "live-trace").length ||
-        COMMAND_CENTER_STATS.liveTraces,
+      value: allCases.filter((c) => c.traceStatus === "live-trace").length,
     },
     {
       label: "Network Signals",
-      value:
-        allCases.filter((c) => c.networkSignal !== "NONE").length ||
-        COMMAND_CENTER_STATS.networkSignals,
+      value: allCases.filter((c) => c.networkSignal !== "NONE").length,
     },
     {
       label: "Critical Alerts",
-      value: criticalCount || COMMAND_CENTER_STATS.criticalAlerts,
+      value: criticalCount,
     },
   ];
 
@@ -70,9 +65,19 @@ function CommandCenter() {
             Real-time intelligence across active fraud investigations.
           </p>
         </div>
-        <div className="ug-system-live">
-          <span className="ug-system-live__dot" />
-          System Live
+        <div
+          className="ug-system-live"
+          style={!isLive ? { color: "var(--color-muted-foreground)" } : undefined}
+        >
+          <span
+            className="ug-system-live__dot"
+            style={
+              !isLive
+                ? { background: "var(--color-muted-foreground)", boxShadow: "none" }
+                : undefined
+            }
+          />
+          {isLive ? "System Live" : "System Offline"}
         </div>
       </div>
 

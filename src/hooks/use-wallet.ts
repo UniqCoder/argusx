@@ -30,7 +30,6 @@ function hopsToGraph(
               ? address.slice(0, 8) + "..." + address.slice(-4)
               : address,
           blockchain: "ETH",
-          riskScore: 0,
           resolved: true,
           x: 0,
           y: 0,
@@ -56,22 +55,19 @@ function hopsToGraph(
     "exchange",
   ];
 
+  // Node label reflects position in the chain, not a fabricated role —
+  // "Victim"/"Exchange" implied intelligence (mixer detection, VASP
+  // attribution) the backend doesn't actually compute per-hop.
   const nodes: TraceNode[] = addrList.map((addr, i) => {
     const prevHop = hops[i - 1];
     const node: TraceNode = {
       id: `n${i}`,
       type: (TYPES[Math.min(i, TYPES.length - 1)] ??
         "intermediate") as TraceNode["type"],
-      label:
-        i === 0
-          ? "Victim"
-          : i === addrList.length - 1
-            ? "Exchange"
-            : `Hop ${i}`,
+      label: i === 0 ? "Searched wallet" : `Hop ${i}`,
       address:
         addr.length > 18 ? addr.slice(0, 8) + "..." + addr.slice(-4) : addr,
       blockchain: (hops[0]?.chain ?? "ETH") as TraceNode["blockchain"],
-      riskScore: i === addrList.length - 1 ? 88 : i === 1 ? 72 : 30,
       x: 0,
       y: 0,
       resolved: true,
@@ -90,14 +86,13 @@ function hopsToGraph(
       method: "Direct Transfer",
       amount: `${hop.amount} ${hop.chain}`,
       timestamp: hop.timestamp,
-      confidence: 92,
-      heuristic: "On-chain trace (live)",
+      txHash: hop.tx_hash,
       dataSource:
         hop.chain === "BTC"
           ? "Blockstream"
           : hop.chain === "TRON"
             ? "TronGrid"
-            : "Etherscan",
+            : "Blockscout",
       resolved: true,
     };
   });

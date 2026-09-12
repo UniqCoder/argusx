@@ -15,7 +15,7 @@ import { login as backendLogin, tokenStore } from "@/lib/api";
 // backend identity — fields like `assigned_investigator` on the backend won't
 // reflect which real person acted. That's a real, pre-existing backend
 // limitation this bridge cannot fix, only work around so real API calls carry
-// a valid token instead of silently failing into each hook's mock fallback.
+// a valid token instead of failing with 401s.
 // Swap the two VITE_BACKEND_DEV_* vars when the backend gets real users.
 export async function ensureBackendAuth(): Promise<void> {
   if (tokenStore.getAccess()) return; // already have a token — idempotent

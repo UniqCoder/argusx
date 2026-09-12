@@ -178,7 +178,7 @@ function Cases() {
             onClick={() => {
               // Set case context so other pages see this case
               setActiveCase({
-                caseId: c.id,
+                caseId: c.rawId,
                 caseNumber: c.id,
                 wallet: c.reportedWallet,
                 chain: c.blockchain as

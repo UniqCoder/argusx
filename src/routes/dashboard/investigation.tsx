@@ -39,34 +39,6 @@ function TraceGraph({
   onSelectEdge,
 }: TraceGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const particlesRef = useRef<{ id: number; edgeIdx: number; t: number }[]>([]);
-  const animRef = useRef<number | undefined>(undefined);
-  const lastTimeRef = useRef<number>(0);
-  const [, forceUpdate] = useState<number>(0);
-
-  const resolvedEdges = edges.filter((e) => e.resolved);
-
-  useEffect(() => {
-    const tick = (now: number) => {
-      const dt = now - lastTimeRef.current;
-      lastTimeRef.current = now;
-      // Advance particles
-      particlesRef.current = particlesRef.current
-        .map((p) => ({ ...p, t: p.t + dt / 1000 }))
-        .filter((p) => p.t < 1);
-      // Spawn new particle on resolved edges occasionally
-      if (Math.random() < 0.02 && resolvedEdges.length > 0) {
-        const edgeIdx = Math.floor(Math.random() * resolvedEdges.length);
-        particlesRef.current.push({ id: now + Math.random(), edgeIdx, t: 0 });
-      }
-      forceUpdate((n) => n + 1);
-      animRef.current = requestAnimationFrame(tick);
-    };
-    animRef.current = requestAnimationFrame(tick);
-    return () => {
-      if (animRef.current) cancelAnimationFrame(animRef.current);
-    };
-  }, [resolvedEdges.length]);
 
   const getNode = useCallback(
     (id: string) => nodes.find((n) => n.id === id),
@@ -121,29 +93,6 @@ function TraceGraph({
             markerEnd={edge.resolved ? "url(#arrow)" : undefined}
             style={{ cursor: "pointer" }}
             onClick={() => onSelectEdge(edge.id)}
-          />
-        );
-      })}
-
-      {/* Particles along resolved edges */}
-      {particlesRef.current.map((p) => {
-        const edge = resolvedEdges[p.edgeIdx];
-        if (!edge) return null;
-        const a = getNode(edge.from);
-        const b = getNode(edge.to);
-        if (!a || !b) return null;
-        const t = p.t;
-        const cx = a.x + (b.x - a.x) * t;
-        const cy = a.y + (b.y - a.y) * t;
-        return (
-          <circle
-            key={p.id}
-            cx={cx}
-            cy={cy}
-            r={3.5}
-            fill="oklch(0.83 0.14 205)"
-            filter="url(#glow-cyan)"
-            opacity={Math.min(1, 1 - Math.abs(t - 0.5) * 1.6 + 0.2)}
           />
         );
       })}
@@ -335,17 +284,6 @@ function TraceControls({
           }}
         />
       </div>
-
-      {/* Confidence */}
-      <div
-        className="ug-confidence"
-        style={{ flexDirection: "row", alignItems: "center", gap: "0.5rem" }}
-      >
-        <span className="ug-confidence__label">Confidence</span>
-        <span className="ug-confidence__value" style={{ fontSize: "1.1rem" }}>
-          {Math.round(72 + progress * 22)}%
-        </span>
-      </div>
     </div>
   );
 }
@@ -458,56 +396,17 @@ function IntelligenceInspector({
 
         <div className="ug-divider" />
 
-        {/* Risk score */}
-        <p className="ug-section-title">Risk Score</p>
-        <div
+        <p
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.75rem",
-            marginBottom: "0.75rem",
+            fontFamily: "var(--font-mono)",
+            fontSize: "0.62rem",
+            color: "var(--color-muted-foreground)",
+            lineHeight: 1.6,
           }}
         >
-          <span
-            style={{
-              fontSize: "1.8rem",
-              fontWeight: 700,
-              letterSpacing: "-0.04em",
-              color:
-                node.riskScore > 70
-                  ? "var(--color-signal)"
-                  : node.riskScore > 40
-                    ? "var(--color-primary)"
-                    : "var(--color-accent)",
-            }}
-          >
-            {node.riskScore}
-          </span>
-          <span
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: "0.62rem",
-              color: "var(--color-muted-foreground)",
-            }}
-          >
-            / 100
-          </span>
-        </div>
-        <div className="ug-risk-bar">
-          <div
-            className="ug-risk-bar__fill"
-            style={{
-              width: `${node.riskScore}%`,
-              background:
-                node.riskScore > 70
-                  ? "var(--color-signal)"
-                  : node.riskScore > 40
-                    ? "var(--color-primary)"
-                    : "var(--color-accent)",
-            }}
-          />
-        </div>
-
+          Per-wallet risk scoring lives on the dedicated Risk Intelligence
+          page — this trace endpoint doesn't compute a score per hop.
+        </p>
       </div>
     );
   }
@@ -536,9 +435,7 @@ function IntelligenceInspector({
             { k: "To", v: toNode?.label ?? edge.to },
             { k: "Method", v: edge.method },
             { k: "Amount", v: edge.amount },
-            { k: "Heuristic", v: edge.heuristic },
             { k: "Data Source", v: edge.dataSource },
-            { k: "Confidence", v: `${edge.confidence}%` },
             { k: "Timestamp", v: edge.timestamp || "Unresolved" },
           ].map(({ k, v }) => (
             <div key={k} className="ug-data-row">
@@ -548,37 +445,23 @@ function IntelligenceInspector({
           ))}
         </div>
 
-        <div className="ug-divider" />
-
-        <p className="ug-section-title">Confidence</p>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.75rem",
-            marginBottom: "0.5rem",
-          }}
-        >
-          <span
-            style={{
-              fontSize: "1.8rem",
-              fontWeight: 700,
-              letterSpacing: "-0.04em",
-              color: "var(--color-accent)",
-            }}
-          >
-            {edge.confidence}%
-          </span>
-        </div>
-        <div className="ug-risk-bar">
-          <div
-            className="ug-risk-bar__fill"
-            style={{
-              width: `${edge.confidence}%`,
-              background: "var(--color-accent)",
-            }}
-          />
-        </div>
+        {edge.txHash && (
+          <>
+            <div className="ug-divider" />
+            <p className="ug-section-title">Transaction Hash</p>
+            <p
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: "0.68rem",
+                color: "var(--color-accent)",
+                wordBreak: "break-all",
+                lineHeight: 1.5,
+              }}
+            >
+              {edge.txHash}
+            </p>
+          </>
+        )}
 
         <div
           style={{
@@ -741,38 +624,6 @@ function InvestigationWorkspace() {
         </div>
 
         <BackendOfflineBanner error={traceError} context="trace" />
-
-        <div className="ug-divider" />
-
-        {/* Trace confidence */}
-        <div className="ug-confidence">
-          <span className="ug-confidence__label">Trace Confidence</span>
-          <span className="ug-confidence__value">
-            {Math.round(72 + progress * 22)}%
-          </span>
-        </div>
-        <div className="ug-risk-bar" style={{ marginTop: "0.5rem" }}>
-          <div
-            className="ug-risk-bar__fill"
-            style={{
-              width: `${72 + progress * 22}%`,
-              background: "var(--color-accent)",
-            }}
-          />
-        </div>
-        {progress > 0.7 && (
-          <p
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: "0.62rem",
-              color: "var(--color-accent)",
-              marginTop: "0.5rem",
-              lineHeight: 1.5,
-            }}
-          >
-            ↑ Confidence increased. Bridge event matched across chains.
-          </p>
-        )}
 
         <div className="ug-divider" />
 

@@ -4,35 +4,11 @@ import { useCorrelation } from "@/hooks/use-correlation";
 import { useCaseContext } from "@/store/case-context-store";
 import { BackendOfflineBanner } from "@/components/shared/BackendOfflineBanner";
 import { truncateAddress } from "@/lib/address";
-import { MOCK_CASES } from "@/lib/mock-data";
 import type { Chain, Complaint } from "@/lib/api-types";
 
 export const Route = createFileRoute("/dashboard/cross-victim")({
   component: CrossVictim,
 });
-
-// ── Static geo distribution (mock until backend has geo endpoint) ──────────
-const GEO_DATA = [
-  { state: "Maharashtra", count: 4, amount: "₹6.2L" },
-  { state: "Karnataka", count: 3, amount: "₹4.8L" },
-  { state: "Delhi", count: 2, amount: "₹2.1L" },
-  { state: "Tamil Nadu", count: 1, amount: "₹1.7L" },
-];
-
-// ── Pre-built wallet pills from existing cases ─────────────────────────────
-const PRESET_WALLETS = MOCK_CASES.filter((c) => c.traceStatus !== "closed").map(
-  (c) => ({
-    addr: c.reportedWallet,
-    chain: c.blockchain as "BTC" | "ETH" | "TRON" | "BSC" | "Polygon",
-    caseId: c.id,
-    badge:
-      c.traceStatus === "critical"
-        ? "ug-badge--critical"
-        : c.traceStatus === "live-trace"
-          ? "ug-badge--live"
-          : "ug-badge--medium",
-  }),
-);
 
 // ── Animated node graph — 3 victims converging on 1 wallet ────────────────
 const CV_NODES = [
@@ -57,7 +33,7 @@ const NODE_C: Record<string, string> = {
 // ── Page ─────────────────────────────────────────────────────────────────
 function CrossVictim() {
   const navigate = useNavigate();
-  const { setActiveCase, setActiveWallet } = useCaseContext();
+  const { setActiveWallet, recentWallets } = useCaseContext();
 
   const [input, setInput] = useState("");
   const [wallet, setWallet] = useState<string | null>(null);
@@ -88,22 +64,9 @@ function CrossVictim() {
     setWallet(trimmed);
   };
 
-  const handlePreset = (addr: string, ch: typeof chain, caseId: string) => {
+  const handlePreset = (addr: string) => {
     setInput(addr);
-    setChain(ch);
     setWallet(addr);
-    // Pre-load the case context too
-    const c = MOCK_CASES.find((m) => m.id === caseId);
-    if (c) {
-      setActiveCase({
-        caseId: c.id,
-        caseNumber: c.id,
-        wallet: c.reportedWallet,
-        chain: c.blockchain as typeof chain,
-        fraudType: c.fraudType,
-        status: c.traceStatus,
-      });
-    }
   };
 
   const handleOpenInvestigation = () => {
@@ -234,36 +197,48 @@ function CrossVictim() {
               marginBottom: "0.5rem",
             }}
           >
-            Known flagged wallets
+            Recently searched
           </p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
-            {PRESET_WALLETS.map((p) => (
-              <button
-                key={p.addr}
-                onClick={() => handlePreset(p.addr, p.chain, p.caseId)}
-                style={{
-                  padding: "0.28rem 0.65rem",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "0.6rem",
-                  background:
-                    wallet === p.addr
-                      ? "oklch(0.83 0.14 205 / 12%)"
-                      : "var(--bg-2)",
-                  border: `1px solid ${wallet === p.addr ? "var(--color-accent)" : "var(--border-strong)"}`,
-                  borderRadius: "2px",
-                  color:
-                    wallet === p.addr
-                      ? "var(--color-accent)"
-                      : "var(--color-muted-foreground)",
-                  cursor: "pointer",
-                  letterSpacing: "0.04em",
-                  transition: "all 0.12s",
-                }}
-              >
-                {truncateAddress(p.addr)}
-              </button>
-            ))}
-          </div>
+          {recentWallets.length === 0 ? (
+            <p
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: "0.6rem",
+                color: "var(--color-muted-foreground)",
+              }}
+            >
+              No wallets searched yet this session.
+            </p>
+          ) : (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+              {recentWallets.map((addr) => (
+                <button
+                  key={addr}
+                  onClick={() => handlePreset(addr)}
+                  style={{
+                    padding: "0.28rem 0.65rem",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "0.6rem",
+                    background:
+                      wallet === addr
+                        ? "oklch(0.83 0.14 205 / 12%)"
+                        : "var(--bg-2)",
+                    border: `1px solid ${wallet === addr ? "var(--color-accent)" : "var(--border-strong)"}`,
+                    borderRadius: "2px",
+                    color:
+                      wallet === addr
+                        ? "var(--color-accent)"
+                        : "var(--color-muted-foreground)",
+                    cursor: "pointer",
+                    letterSpacing: "0.04em",
+                    transition: "all 0.12s",
+                  }}
+                >
+                  {truncateAddress(addr)}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -584,14 +559,9 @@ function CrossVictim() {
                   key={c.id}
                   onClick={() => {
                     if (!wallet) return;
-                    setActiveCase({
-                      caseId: c.id,
-                      caseNumber: c.ncrp_ref ?? c.id,
-                      wallet,
-                      chain,
-                      ...(c.fraud_typology ? { fraudType: c.fraud_typology } : {}),
-                      status: "investigating",
-                    });
+                    // A complaint's own id isn't a Case id — only set what's
+                    // real: the wallet this correlation was run against.
+                    setActiveWallet(wallet, chain);
                     navigate({ to: "/dashboard/investigation" });
                   }}
                   style={{
@@ -761,71 +731,6 @@ function CrossVictim() {
                 </div>
               </div>
 
-              {/* Geographic distribution */}
-              <div className="ug-surface" style={{ overflow: "hidden" }}>
-                <div className="ug-panel-header">
-                  <span
-                    className="ug-section-title"
-                    style={{ marginBottom: 0 }}
-                  >
-                    Geographic Spread
-                  </span>
-                </div>
-                <div style={{ padding: "0.75rem 1.25rem 1rem" }}>
-                  {GEO_DATA.map((g, i) => {
-                    const pct = Math.min(
-                      100,
-                      Math.round((g.count / Math.max(sig.victims, 1)) * 100),
-                    );
-                    return (
-                      <div
-                        key={g.state}
-                        style={{
-                          marginBottom: i < GEO_DATA.length - 1 ? "0.75rem" : 0,
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "baseline",
-                            marginBottom: "0.25rem",
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontFamily: "var(--font-mono)",
-                              fontSize: "0.62rem",
-                              color: "var(--color-foreground)",
-                            }}
-                          >
-                            {g.state}
-                          </span>
-                          <span
-                            style={{
-                              fontFamily: "var(--font-mono)",
-                              fontSize: "0.58rem",
-                              color: "var(--color-muted-foreground)",
-                            }}
-                          >
-                            {g.count} · {g.amount}
-                          </span>
-                        </div>
-                        <div className="ug-risk-bar">
-                          <div
-                            className="ug-risk-bar__fill"
-                            style={{
-                              width: `${pct}%`,
-                              background: "var(--color-accent)",
-                            }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
               {/* Backend offline notice */}
               {error && (
                 <div
@@ -840,7 +745,7 @@ function CrossVictim() {
                     lineHeight: 1.6,
                   }}
                 >
-                  Backend offline — showing mock data.
+                  Couldn't reach the backend — {error}
                 </div>
               )}
             </div>
