@@ -4,7 +4,6 @@ app/workers/tasks/graph_builder.py — Async Neo4j Graph Builder Celery Task (Ph
 Populates Wallet, Transaction, VASP, and Cluster nodes in Neo4j from blockchain explorers.
 Runs asynchronously off any API request path.
 """
-import asyncio
 import structlog
 from typing import List, Optional
 
@@ -18,6 +17,7 @@ from app.services.explorers.eth_explorer import EthereumExplorer
 from app.services.explorers.tron_explorer import TronExplorer
 from app.services.explorers.known_vasps import lookup_known_vasp
 from app.workers.celery_app import celery_app
+from app.workers.tasks._async_utils import run_async
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -127,16 +127,4 @@ def build_graph_task(self, address: str, chain: str, max_depth: int = 2) -> dict
     """
     Celery task to build the transaction graph in Neo4j for a given wallet address.
     """
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.ensure_future(_build_wallet_graph_async(address, chain, max_depth))
-            return {"status": "queued"}
-        else:
-            return loop.run_until_complete(_build_wallet_graph_async(address, chain, max_depth))
-    except Exception:
-        new_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(new_loop)
-        result = new_loop.run_until_complete(_build_wallet_graph_async(address, chain, max_depth))
-        new_loop.close()
-        return result
+    return run_async(lambda: _build_wallet_graph_async(address, chain, max_depth))

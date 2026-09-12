@@ -136,6 +136,19 @@ export interface RiskResponse {
   evidence: RiskEvidence[];
 }
 
+// ── Deposit check ──────────────────────────────────────────────────────────
+export interface DepositCheckRequest {
+  address: string;
+  chain: Chain;
+  amount: number;
+}
+
+export interface DepositCheckResponse {
+  risk_score: number;
+  action: AlertAction;
+  case_ref?: string | null;
+}
+
 // ── Correlation ────────────────────────────────────────────────────────────
 export interface CorrelateRequest {
   wallet_id?: string;

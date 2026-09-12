@@ -4,7 +4,6 @@ app/workers/tasks/registry_refresh.py — Async Risk Registry Refresh Celery Tas
 Computes ML risk score and populates the Redis risk registry (risk:{chain}:{address})
 so /check-wallet hot-path lookups remain purely in Redis.
 """
-import asyncio
 import structlog
 from typing import Optional
 
@@ -13,6 +12,7 @@ from app.db.session import AsyncSessionLocal
 from app.schemas.common import Chain
 from app.services import registry_service, risk_service
 from app.workers.celery_app import celery_app
+from app.workers.tasks._async_utils import run_async
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -60,16 +60,4 @@ def refresh_wallet_risk_task(self, address: str, chain: str, case_ref: Optional[
     """
     Celery task to asynchronously compute ML risk and update the Redis risk registry.
     """
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.ensure_future(_refresh_wallet_risk_async(address, chain, case_ref))
-            return {"status": "queued"}
-        else:
-            return loop.run_until_complete(_refresh_wallet_risk_async(address, chain, case_ref))
-    except Exception:
-        new_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(new_loop)
-        result = new_loop.run_until_complete(_refresh_wallet_risk_async(address, chain, case_ref))
-        new_loop.close()
-        return result
+    return run_async(lambda: _refresh_wallet_risk_async(address, chain, case_ref))

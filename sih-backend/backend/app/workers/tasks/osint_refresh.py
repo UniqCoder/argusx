@@ -9,7 +9,6 @@ cache so /risk lookups stay fast (no per-request network):
 Fails safely: on any source error the previous cached data is retained and the
 failure is logged; this task never blocks or breaks the risk hot path.
 """
-import asyncio
 import json
 import structlog
 from typing import Optional
@@ -18,6 +17,7 @@ from app.core.config import get_settings
 from app.services import osint_service
 from app.services.registry_service import get_redis_client
 from app.workers.celery_app import celery_app
+from app.workers.tasks._async_utils import run_async
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -116,16 +116,4 @@ async def _sync_async() -> dict:
 @celery_app.task(name="app.workers.tasks.osint_refresh.sync_osint_sources")
 def sync_osint_sources() -> dict:
     """Celery task: refresh structured OSINT cache from public sources."""
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.ensure_future(_sync_async())
-            return {"status": "queued"}
-        return loop.run_until_complete(_sync_async())
-    except Exception:
-        new_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(new_loop)
-        try:
-            return new_loop.run_until_complete(_sync_async())
-        finally:
-            new_loop.close()
+    return run_async(_sync_async)

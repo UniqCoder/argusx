@@ -9,6 +9,8 @@ import type {
   RefreshResponse,
   TraceResponse,
   RiskResponse,
+  DepositCheckRequest,
+  DepositCheckResponse,
   CorrelateRequest,
   CorrelateResponse,
   Paginated,
@@ -171,6 +173,15 @@ export function getWalletRisk(
   return request<RiskResponse>(
     `/api/v1/wallets/${encodeURIComponent(address)}/risk?chain=${chain}`,
   );
+}
+
+export function checkDeposit(
+  body: DepositCheckRequest,
+): Promise<DepositCheckResponse> {
+  return request<DepositCheckResponse>("/api/v1/wallets/deposit-check", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 // ── Correlation ────────────────────────────────────────────────────────────
