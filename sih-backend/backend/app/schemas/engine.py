@@ -43,6 +43,13 @@ class TerminalKind(str, Enum):
     DUST = "DUST"
     DEPTH_LIMIT = "DEPTH_LIMIT"
     NODE_LIMIT = "NODE_LIMIT"
+    # This address's own recent transactions include no outgoing transfers —
+    # a real, correct result (a contract, a receive-only wallet, or activity
+    # older than the fetched window), not a failure. Previously taint.py
+    # used the raw string "NO_OUTFLOW" here for non-root nodes without it
+    # being a valid enum member, which would have raised a validation error
+    # the first real trace that hit this branch.
+    NO_OUTFLOW = "NO_OUTFLOW"
 
 
 class DecisionAction(str, Enum):
@@ -63,10 +70,13 @@ class AnchorCreate(BaseModel):
     asserted_at: Optional[datetime] = None
     victim_amount_inr: Optional[Decimal] = Field(default=None, ge=0)
     evidence_uri: Optional[str] = None
+    # Which investigation this belongs to, when traced from a case context.
+    case_id: Optional[UUID] = None
 
 
 class AnchorRead(BaseModel):
     id: UUID
+    case_id: Optional[UUID] = None
     address: str
     chain: Chain
     attestation_class: AttestationClass
@@ -103,6 +113,18 @@ class TaintNodeRead(BaseModel):
     entity_jurisdiction: Optional[str] = None
     proof_path: list[str]
     still_active: bool
+    # The specific incoming edge that reached this node — None only for the
+    # anchor itself (hop 0). Lets the frontend render the real branching
+    # graph (parent -> child edges) instead of a flat hop list.
+    parent_address: Optional[str] = None
+    tx_hash: Optional[str] = None
+    tx_amount: Optional[Decimal] = None
+    # Real on-chain timestamp of the transaction that reached this node
+    # (None for the anchor). Already computed and persisted — see
+    # app/engine/taint.py's TaintedNode — just not returned until now. Lets
+    # the frontend do an honest chronological replay instead of an
+    # arbitrary progress bar.
+    first_tainted_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 

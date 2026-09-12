@@ -1,18 +1,15 @@
 import { useCaseContext } from "@/store/case-context-store";
-import { MOCK_CASES } from "@/lib/mock-data";
+import { truncateAddress } from "@/lib/address";
 import { useState } from "react";
 
 export function WalletSelector() {
-  const { activeWallet, activeChain, setActiveWallet } = useCaseContext();
+  const { activeWallet, activeChain, setActiveWallet, recentWallets } =
+    useCaseContext();
   const [isOpen, setIsOpen] = useState(false);
 
-  // Get wallets from mock cases — only use fields that exist on InvestigationCase
-  const wallets = Array.from(
-    new Set(MOCK_CASES.map((c) => c.reportedWallet)),
-  ).map((w) => w.replace("...", ""));
+  const wallets = recentWallets;
 
   const handleWalletSelect = (wallet: string) => {
-    // Use current chain, or default to ETH if no chain is set
     const chain = (activeChain || "ETH") as
       "BTC" | "ETH" | "TRON" | "BSC" | "Polygon";
     setActiveWallet(wallet, chain);
@@ -59,6 +56,19 @@ export function WalletSelector() {
             boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
           }}
         >
+          {wallets.length === 0 && (
+            <p
+              style={{
+                padding: "0.65rem 0.75rem",
+                fontFamily: "var(--font-mono)",
+                fontSize: "0.6rem",
+                color: "var(--color-muted-foreground)",
+                  maxWidth: 220,
+              }}
+            >
+              No wallets searched yet this session.
+            </p>
+          )}
           {wallets.map((wallet) => (
             <button
               key={wallet}
@@ -99,7 +109,7 @@ export function WalletSelector() {
                     : "var(--color-muted-foreground)";
               }}
             >
-              {wallet}
+              {truncateAddress(wallet)}
             </button>
           ))}
         </div>

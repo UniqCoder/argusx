@@ -43,6 +43,13 @@ class Anchor(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
         server_default=func.gen_random_uuid(),
     )
+    # Which investigation this anchor/trace belongs to, when traced from a
+    # case context — nullable because a wallet can be traced ad hoc with no
+    # case selected. Lets a case's Evidence Trail show the real anchor/
+    # trace/decision events for that specific investigation.
+    case_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cases.id"), nullable=True,
+    )
     address: Mapped[str] = mapped_column(String, nullable=False)
     chain: Mapped[str] = mapped_column(String, nullable=False)
     attestation_class: Mapped[str] = mapped_column(String(1), nullable=False)  # A | B | C
@@ -115,6 +122,11 @@ class TaintNode(Base):
     entity_jurisdiction: Mapped[str | None] = mapped_column(String, nullable=True)
     proof_path: Mapped[list] = mapped_column(JSON, nullable=False, default=list)  # ordered tx hashes
     first_tainted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    # The specific incoming edge that reached this node (None for the anchor
+    # itself) — lets callers render the real branching graph, not a flat list.
+    parent_address: Mapped[str | None] = mapped_column(String, nullable=True)
+    tx_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    tx_amount: Mapped[float | None] = mapped_column(Numeric(24, 8), nullable=True)
 
 
 class EvidenceLedgerEntry(Base):

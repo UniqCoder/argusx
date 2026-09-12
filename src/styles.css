@@ -1208,7 +1208,11 @@ body {
 .ug-page {
   flex: 1;
   overflow-y: auto;
-  overflow-x: hidden;
+  /* auto, not hidden: .ug-workspace (the investigation graph layout) has a
+     min-width below so its 3-column grid never gets squeezed to 0 — on a
+     narrower window that now means a horizontal scrollbar here instead of
+     the center graph column silently collapsing to nothing. */
+  overflow-x: auto;
   padding: 2rem 2.25rem;
   scrollbar-width: thin;
   scrollbar-color: oklch(0.98 0 0 / 12%) transparent;
@@ -1450,10 +1454,14 @@ body {
 
 .ug-workspace {
   display: grid;
-  grid-template-columns: 232px 1fr 272px;
+  grid-template-columns: 232px minmax(480px, 1fr) 272px;
   grid-template-rows: 1fr auto;
   gap: 0;
   height: calc(100vh - 48px);
+  /* Never let the center graph column get squeezed to 0 width on a
+     narrower window — .ug-page (the scroll container) goes horizontal
+     instead. See its overflow-x comment. */
+  min-width: 960px;
   overflow: hidden;
 }
 

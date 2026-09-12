@@ -82,11 +82,19 @@ class TronExplorer(BlockchainExplorer):
             from_addr = item.get("ownerAddress", "")
             to_addr = item.get("toAddress", "")
 
-            # If toAddress is missing, check contract/trigger_info parameter
+            # If toAddress is missing, check contract/trigger_info parameter.
+            # For a TRC20 transfer(address _to, uint256 _value) call, Tronscan
+            # names the decoded ABI params with a leading underscore (_to,
+            # _value) — without checking those keys too, to_addr silently
+            # stayed as the CONTRACT address (the call target) rather than the
+            # real recipient, making every TRC20 transfer look like a
+            # zero-amount transfer to the contract itself.
             trigger_info = item.get("trigger_info") or {}
             params = trigger_info.get("parameter") or {}
             contract_data = item.get("contractData") or {}
-            if params.get("to"):
+            if params.get("_to"):
+                to_addr = params["_to"]
+            elif params.get("to"):
                 to_addr = params["to"]
             elif contract_data.get("to_address"):
                 to_addr = contract_data["to_address"]
@@ -105,11 +113,14 @@ class TronExplorer(BlockchainExplorer):
                 decimals = 6
 
             # Tronscan reports contract transfers with top-level amount=0;
-            # the actual value is in trigger_info.parameter.value or contractData.amount.
+            # the actual value is in trigger_info.parameter._value (TRC20
+            # transfer's decoded ABI param — underscore-prefixed, see above)
+            # or contractData.amount.
             amount = 0.0
             for raw_amount in (
                 item.get("amount"),
                 contract_data.get("amount"),
+                params.get("_value"),
                 params.get("value"),
                 params.get("amount"),
             ):

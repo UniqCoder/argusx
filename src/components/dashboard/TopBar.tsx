@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useAlerts } from "@/hooks/use-alerts";
+import { useHealth } from "@/hooks/use-health";
 
 function SearchIcon() {
   return (
@@ -59,6 +60,7 @@ export function TopBar() {
   const [showNotifs, setShowNotifs] = useState(false);
   const navigate = useNavigate();
   const { events, unreadCount } = useAlerts();
+  const { isLive } = useHealth();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,10 +87,20 @@ export function TopBar() {
 
       <div style={{ flex: 1 }} />
 
-      {/* System live */}
-      <div className="ug-system-live">
-        <span className="ug-system-live__dot" />
-        SYSTEM LIVE
+      {/* System live — reflects a real GET /health poll, not decoration */}
+      <div
+        className="ug-system-live"
+        style={!isLive ? { color: "var(--color-muted-foreground)" } : undefined}
+      >
+        <span
+          className="ug-system-live__dot"
+          style={
+            !isLive
+              ? { background: "var(--color-muted-foreground)", boxShadow: "none" }
+              : undefined
+          }
+        />
+        {isLive ? "SYSTEM LIVE" : "SYSTEM OFFLINE"}
       </div>
 
       {/* Separator */}
@@ -324,7 +336,7 @@ export function TopBar() {
               letterSpacing: "0.1em",
             }}
           >
-            LIVE
+            ACTIVE SESSION
           </p>
         </div>
       </div>

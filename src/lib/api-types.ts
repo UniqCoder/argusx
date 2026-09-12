@@ -32,27 +32,6 @@ export interface Paginated<T> {
 }
 
 // ── Core entities ──────────────────────────────────────────────────────────
-export interface Wallet {
-  id: string;
-  address: string;
-  chain: Chain;
-  risk_score?: number;
-  risk_tier?: RiskTier;
-  vasp_identified?: string | null;
-  cluster_id?: string | null;
-  first_seen?: string | null;
-  last_seen?: string | null;
-}
-
-export interface Hop {
-  from_address: string;
-  to_address: string;
-  tx_hash: string;
-  amount: number;
-  chain: Chain;
-  timestamp: string;
-}
-
 export interface RiskEvidence {
   feature_name: string;
   contribution: number;
@@ -87,12 +66,23 @@ export interface ComplaintDetail extends Complaint {
   extracted_entities?: ExtractedEntities | null;
 }
 
+export interface CaseWallet {
+  id: string;
+  address: string;
+  chain: string;
+  risk_score?: number | null;
+  risk_tier?: RiskTier | null;
+  first_seen?: string | null;
+  last_seen?: string | null;
+}
+
 export interface Case {
   id: string;
   status: CaseStatus;
   assigned_investigator?: string | null;
   opened_at: string;
   closed_at?: string | null;
+  wallets: CaseWallet[];
 }
 
 export interface Alert {
@@ -122,18 +112,109 @@ export interface RefreshResponse {
 }
 
 // ── Wallet endpoints ───────────────────────────────────────────────────────
-export interface TraceResponse {
-  wallet: Wallet;
-  path: Hop[];
-  nearest_vasp?: string | null;
-  hops_count: number;
-  traced_at: string;
-}
-
 export interface RiskResponse {
   risk_score: number;
   risk_tier: RiskTier;
   evidence: RiskEvidence[];
+}
+
+// ── Provenance engine (v2) — anchors + taint-propagation trace ─────────────
+export type AttestationClass = "A" | "B" | "C";
+export type AttestationType =
+  | "LEGAL_COMPLAINT"
+  | "SOVEREIGN_DESIGNATION"
+  | "PUBLIC_ATTRIBUTED_REPORT"
+  | "INVESTIGATOR_ASSERTED";
+export type TaintMethod = "haircut" | "poison" | "fifo";
+export type TerminalKind =
+  | "VASP"
+  | "MIXER_BOUNDARY"
+  | "BRIDGE"
+  | "DUST"
+  | "DEPTH_LIMIT"
+  | "NODE_LIMIT"
+  | "NO_OUTFLOW";
+export type DecisionAction = "monitor" | "hold_for_review" | "block";
+
+export interface AnchorCreate {
+  address: string;
+  chain: Chain;
+  attestation_class: AttestationClass;
+  attestation_type: AttestationType;
+  source_ref: string;
+  asserted_by: string;
+  victim_amount_inr?: number | null;
+  evidence_uri?: string | null;
+  case_id?: string | null;
+}
+
+export interface AnchorRead {
+  id: string;
+  case_id?: string | null;
+  address: string;
+  chain: Chain;
+  attestation_class: AttestationClass;
+  attestation_type: string;
+  source_ref: string;
+  asserted_by: string;
+  asserted_at: string;
+  victim_amount_inr?: number | null;
+  evidence_uri?: string | null;
+  created_at: string;
+}
+
+export interface EngineTraceRequest {
+  anchor_id: string;
+  method?: TaintMethod;
+  max_hops?: number;
+  max_nodes?: number;
+  dilution_floor?: number;
+}
+
+export interface TaintNodeRead {
+  address: string;
+  chain: Chain;
+  hop: number;
+  taint_fraction: number;
+  tainted_value: number;
+  tainted_inr?: number | null;
+  terminal_kind?: TerminalKind | null;
+  entity_name?: string | null;
+  entity_jurisdiction?: string | null;
+  proof_path: string[];
+  still_active: boolean;
+  parent_address?: string | null;
+  tx_hash?: string | null;
+  tx_amount?: number | null;
+  first_tainted_at?: string | null;
+}
+
+export interface EngineTraceResult {
+  trace_id: string;
+  anchor: AnchorRead;
+  method: TaintMethod;
+  dilution_floor: number;
+  max_hops: number;
+  node_count: number;
+  nodes: TaintNodeRead[];
+  terminals: TaintNodeRead[];
+  unattributed_residual: number;
+  terminated_at_mixer: number;
+  reproducible_hash: string;
+  completed_at: string;
+}
+
+// ── Deposit check ──────────────────────────────────────────────────────────
+export interface DepositCheckRequest {
+  address: string;
+  chain: Chain;
+  amount: number;
+}
+
+export interface DepositCheckResponse {
+  risk_score: number;
+  action: AlertAction;
+  case_ref?: string | null;
 }
 
 // ── Correlation ────────────────────────────────────────────────────────────
@@ -160,6 +241,15 @@ export interface CaseCreate {
 export interface CasePatch {
   status?: CaseStatus;
   assigned_investigator?: string | null;
+}
+
+// ── Evidence Trail — real audit-log + forensic-ledger events for a case ────
+export interface EvidenceEvent {
+  source: "audit" | "ledger";
+  event_type: string;
+  actor?: string | null;
+  occurred_at: string;
+  details: Record<string, unknown>;
 }
 
 // ── Health ─────────────────────────────────────────────────────────────────

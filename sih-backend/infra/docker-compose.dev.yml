@@ -20,6 +20,8 @@ services:
       POSTGRES_PASSWORD: devpass
     ports:
       - "5432:5432"
+    volumes:
+      - D:/argus-data/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U unigraph -d unigraph"]
       interval: 10s
@@ -33,10 +35,13 @@ services:
     container_name: argus_dev_neo4j
     restart: unless-stopped
     environment:
-      NEO4J_AUTH: neo4j/devpass
+      NEO4J_AUTH: neo4j/devpass123
     ports:
       - "7474:7474"
       - "7687:7687"
+    volumes:
+      - D:/argus-data/neo4j-data:/data
+      - D:/argus-data/neo4j-logs:/logs
     healthcheck:
       test: ["CMD", "neo4j", "status"]
       interval: 15s
@@ -50,8 +55,11 @@ services:
     image: redis:7-alpine
     container_name: argus_dev_redis
     restart: unless-stopped
+    command: redis-server --appendonly yes
     ports:
       - "6379:6379"
+    volumes:
+      - D:/argus-data/redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -70,7 +78,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://unigraph:devpass@postgres:5432/unigraph
       NEO4J_URI: bolt://neo4j:7687
       NEO4J_USER: neo4j
-      NEO4J_PASSWORD: devpass
+      NEO4J_PASSWORD: devpass123
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
@@ -87,6 +95,46 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
+    volumes:
+      - ../backend:/app
+    networks:
+      - argus_dev_net
+
+  worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: argus_dev_worker
+    restart: unless-stopped
+    command: celery -A app.workers.celery_app worker --loglevel=info
+    # Overrides the image's HTTP healthcheck (inherited from the backend
+    # Dockerfile) — this container runs no HTTP server, so that check
+    # would always fail here.
+    healthcheck:
+      test: ["CMD", "celery", "-A", "app.workers.celery_app", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    environment:
+      DATABASE_URL: postgresql+asyncpg://unigraph:devpass@postgres:5432/unigraph
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: devpass123
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      JWT_SECRET_KEY: dev_secret_DO_NOT_USE_IN_PROD
+      VASP_API_KEYS: dev_vasp_key_1
+      APP_ENV: development
+      LOG_LEVEL: DEBUG
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
     volumes:
       - ../backend:/app
     networks:

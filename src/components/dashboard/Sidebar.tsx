@@ -88,13 +88,6 @@ const NAV_SECTIONS: NavSection[] = [
     heading: "Operations",
     items: [
       {
-        label: "Live Alerts",
-        to: "/dashboard/alerts",
-        icon: (
-          <Icon path="M8 2a4.5 4.5 0 00-4.5 4.5v3L2 11h12l-1.5-1.5v-3A4.5 4.5 0 008 2zM6.5 11.5a1.5 1.5 0 003 0" />
-        ),
-      },
-      {
         label: "Deposit Watch",
         to: "/dashboard/deposit",
         icon: <Icon path="M8 2v6l3 3M2 8a6 6 0 1012 0A6 6 0 002 8z" />,

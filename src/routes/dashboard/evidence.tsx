@@ -1,49 +1,98 @@
-﻿import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import {
-  MOCK_EVIDENCE_TRAIL,
-  type EvidenceEvent,
-  MOCK_CASES,
-} from "@/lib/mock-data";
+import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { useCaseContext } from "@/store/case-context-store";
 import { CaseSelector } from "@/components/dashboard/CaseSelector";
+import { getCase, getCaseEvidence } from "@/lib/api";
+import type { Case, EvidenceEvent } from "@/lib/api-types";
 
 export const Route = createFileRoute("/dashboard/evidence")({
   component: EvidenceTrail,
 });
 
-const TYPE_COLOR: Record<EvidenceEvent["type"], string> = {
-  complaint: "var(--color-primary)",
-  report: "var(--color-primary)",
-  trace: "var(--color-accent)",
-  hop: "var(--color-accent)",
-  "cross-chain": "var(--color-primary)",
-  signal: "var(--color-signal)",
-  vasp: "var(--color-primary)",
-  evidence: "var(--color-accent)",
+const EVENT_META: Record<
+  string,
+  { title: string; icon: string; color: string }
+> = {
+  view_case: { title: "Case Viewed", icon: "V", color: "var(--color-muted-foreground)" },
+  update_case_status: { title: "Case Status Updated", icon: "U", color: "var(--color-primary)" },
+  export_pdf_report: { title: "Report Exported", icon: "R", color: "var(--color-primary)" },
+  anchor_registered: { title: "Anchor Registered", icon: "A", color: "var(--color-accent)" },
+  trace_completed: { title: "Trace Completed", icon: "T", color: "var(--color-accent)" },
+  decision_issued: { title: "Decision Issued", icon: "D", color: "var(--color-signal)" },
 };
 
-const TYPE_ICON: Record<EvidenceEvent["type"], string> = {
-  complaint: "C",
-  report: "R",
-  trace: "T",
-  hop: "H",
-  "cross-chain": "X",
-  signal: "S",
-  vasp: "V",
-  evidence: "E",
-};
+function metaFor(evt: EvidenceEvent) {
+  return (
+    EVENT_META[evt.event_type] ?? {
+      title: evt.event_type.replace(/_/g, " "),
+      icon: evt.source === "ledger" ? "L" : "•",
+      color: "var(--color-muted-foreground)",
+    }
+  );
+}
+
+// Every event_type carries different real fields in `details` — this picks
+// the ones worth a one-line summary instead of dumping raw JSON.
+function detailLine(evt: EvidenceEvent): string {
+  const d = evt.details;
+  switch (evt.event_type) {
+    case "anchor_registered":
+      return `${d["address"]} (${d["chain"]}) — attestation class ${d["attestation_class"]}, source: ${d["source_ref"]}`;
+    case "trace_completed":
+      return `${d["node_count"]} node(s) traced. Reproducible hash: ${String(d["reproducible_hash"] ?? "").slice(0, 16)}…`;
+    case "decision_issued":
+      return `Action: ${String(d["action"] ?? "").toUpperCase()} — ${d["reasoning"] ?? ""}`;
+    case "update_case_status":
+      return "Case status changed by an investigator.";
+    case "export_pdf_report":
+      return "Forensic PDF report generated for this case.";
+    case "view_case":
+      return "Case record opened by an investigator.";
+    default:
+      return Object.keys(d).length > 0 ? JSON.stringify(d) : "—";
+  }
+}
 
 function EvidenceTrail() {
-  const [selected, setSelected] = useState<string | null>("ev9");
-  const { activeCaseId, hasActiveCase } = useCaseContext();
+  const { activeCaseId, activeCaseNumber } = useCaseContext();
+  const [caseData, setCaseData] = useState<Case | null>(null);
+  const [events, setEvents] = useState<EvidenceEvent[]>([]);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Use active case if available, otherwise fallback to mock
-  const caseData = hasActiveCase()
-    ? MOCK_CASES.find((c) => c.id === activeCaseId) || MOCK_CASES[0]!
-    : MOCK_CASES[0]!;
+  useEffect(() => {
+    if (!activeCaseId) {
+      setCaseData(null);
+      setEvents([]);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    Promise.all([getCase(activeCaseId), getCaseEvidence(activeCaseId)])
+      .then(([c, evts]) => {
+        if (cancelled) return;
+        setCaseData(c);
+        setEvents(evts);
+        setSelected(evts.length > 0 ? evts.length - 1 : null);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setCaseData(null);
+          setEvents([]);
+          setError(e instanceof Error ? e.message : "Failed to load evidence");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCaseId]);
 
-  const selectedEvent = MOCK_EVIDENCE_TRAIL.find((e) => e.id === selected);
+  const selectedEvent = selected != null ? events[selected] : undefined;
 
   return (
     <>
@@ -53,179 +102,229 @@ function EvidenceTrail() {
           <h1 className="ug-page-header__title">Evidence Trail</h1>
           <p className="ug-page-header__sub">
             {activeCaseId
-              ? `Trail for: ${caseData.id}`
+              ? `Trail for: ${activeCaseNumber ?? activeCaseId}`
               : "Chronological investigation log — every event is defensible and court-ready."}
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <CaseSelector />
-          <span
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: "0.6rem",
-              color: "var(--color-muted-foreground)",
-              letterSpacing: "0.1em",
-            }}
-          >
-            {MOCK_EVIDENCE_TRAIL.length} events
-          </span>
-        </div>
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 300px",
-          gap: "1rem",
-          alignItems: "start",
-        }}
-      >
-        {/* Timeline */}
-        <div className="ug-surface" style={{ overflow: "hidden" }}>
-          <div className="ug-panel-header">
-            <span className="ug-section-title" style={{ marginBottom: 0 }}>
-              UG-2026-04821 � Investigation Trail
-            </span>
+          {events.length > 0 && (
             <span
               style={{
                 fontFamily: "var(--font-mono)",
-                fontSize: "0.56rem",
+                fontSize: "0.6rem",
                 color: "var(--color-muted-foreground)",
+                letterSpacing: "0.1em",
               }}
             >
-              APPEND-ONLY
+              {events.length} events
             </span>
-          </div>
-
-          <div style={{ padding: "0.75rem 1.25rem" }}>
-            <div className="ug-timeline">
-              {MOCK_EVIDENCE_TRAIL.map((evt) => {
-                const color = TYPE_COLOR[evt.type];
-                const isSelected = selected === evt.id;
-                return (
-                  <div
-                    key={evt.id}
-                    className="ug-timeline-event"
-                    onClick={() => setSelected(evt.id)}
-                  >
-                    {/* Dot */}
-                    <div
-                      className="ug-timeline-event__dot"
-                      style={{
-                        borderColor: isSelected
-                          ? color
-                          : "var(--border-strong)",
-                        background: isSelected
-                          ? `${color.replace(")", " / 10%)")}`
-                          : "var(--bg-0)",
-                        boxShadow: isSelected
-                          ? `0 0 0 2px ${color.replace(")", " / 18%)")}`
-                          : "none",
-                      }}
-                    >
-                      <span style={{ fontSize: "0.6rem" }}>
-                        {TYPE_ICON[evt.type]}
-                      </span>
-                    </div>
-
-                    {/* Body */}
-                    <div className="ug-timeline-event__body">
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "baseline",
-                          marginBottom: "0.2rem",
-                        }}
-                      >
-                        <h3
-                          style={{
-                            fontSize: "0.8rem",
-                            fontWeight: 600,
-                            color: isSelected
-                              ? color
-                              : "var(--color-foreground)",
-                            letterSpacing: "-0.01em",
-                          }}
-                        >
-                          {evt.title}
-                        </h3>
-                        <span
-                          style={{
-                            fontFamily: "var(--font-mono)",
-                            fontSize: "0.58rem",
-                            color: "var(--color-muted-foreground)",
-                            flexShrink: 0,
-                            marginLeft: "0.75rem",
-                          }}
-                        >
-                          {evt.timestamp.split(" ")[1] ?? evt.timestamp}
-                        </span>
-                      </div>
-                      <p
-                        style={{
-                          fontSize: "0.73rem",
-                          color: "var(--color-muted-foreground)",
-                          lineHeight: 1.5,
-                          marginBottom: "0.3rem",
-                        }}
-                      >
-                        {evt.detail}
-                      </p>
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: "1rem",
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontFamily: "var(--font-mono)",
-                            fontSize: "0.58rem",
-                            color: "var(--color-muted-foreground)",
-                          }}
-                        >
-                          {evt.dataSource}
-                        </span>
-                        <span
-                          style={{
-                            fontFamily: "var(--font-mono)",
-                            fontSize: "0.58rem",
-                            color:
-                              evt.confidence > 90
-                                ? "var(--color-accent)"
-                                : evt.confidence > 70
-                                  ? "var(--color-primary)"
-                                  : "var(--color-muted-foreground)",
-                          }}
-                        >
-                          {evt.confidence}% conf
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          )}
         </div>
+      </div>
 
-        {/* Inspector */}
-        <div style={{ position: "sticky", top: 0 }}>
-          {selectedEvent ? (
-            <div className="ug-surface" style={{ overflow: "hidden" }}>
-              <div
-                className="ug-panel-header"
+      {!activeCaseId && (
+        <div className="ug-surface" style={{ padding: "1.5rem" }}>
+          <p
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.68rem",
+              color: "var(--color-muted-foreground)",
+            }}
+          >
+            NO ACTIVE INVESTIGATION — select a case above to view its
+            evidence trail.
+          </p>
+        </div>
+      )}
+
+      {activeCaseId && loading && (
+        <div className="ug-surface" style={{ padding: "1.5rem" }}>
+          <p
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.68rem",
+              color: "var(--color-muted-foreground)",
+            }}
+          >
+            Loading evidence…
+          </p>
+        </div>
+      )}
+
+      {activeCaseId && !loading && error && (
+        <div className="ug-surface" style={{ padding: "1.5rem" }}>
+          <p
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.68rem",
+              color: "var(--color-signal)",
+            }}
+          >
+            Couldn't load this case's evidence — {error}
+          </p>
+        </div>
+      )}
+
+      {activeCaseId && !loading && !error && caseData && events.length === 0 && (
+        <div className="ug-surface" style={{ padding: "1.5rem" }}>
+          <p
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.68rem",
+              color: "var(--color-muted-foreground)",
+              lineHeight: 1.6,
+            }}
+          >
+            No evidence recorded yet for this case. Trace a wallet while this
+            case is active (from Trace Wallet, or by opening the case first)
+            to start building its real evidence trail — every anchor
+            registered, trace run, and decision issued will append here.
+          </p>
+        </div>
+      )}
+
+      {activeCaseId && !loading && !error && events.length > 0 && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 300px",
+            gap: "1rem",
+            alignItems: "start",
+          }}
+        >
+          {/* Timeline */}
+          <div className="ug-surface" style={{ overflow: "hidden" }}>
+            <div className="ug-panel-header">
+              <span className="ug-section-title" style={{ marginBottom: 0 }}>
+                {activeCaseNumber ?? activeCaseId} — Investigation Trail
+              </span>
+              <span
                 style={{
-                  borderLeft: `2px solid ${TYPE_COLOR[selectedEvent.type]}`,
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "0.56rem",
+                  color: "var(--color-muted-foreground)",
                 }}
               >
+                APPEND-ONLY
+              </span>
+            </div>
+
+            <div style={{ padding: "0.75rem 1.25rem" }}>
+              <div className="ug-timeline">
+                {events.map((evt, i) => {
+                  const meta = metaFor(evt);
+                  const isSelected = selected === i;
+                  const time = new Date(evt.occurred_at).toLocaleString(
+                    "en-IN",
+                  );
+                  return (
+                    <div
+                      key={i}
+                      className="ug-timeline-event"
+                      onClick={() => setSelected(i)}
+                    >
+                      <div
+                        className="ug-timeline-event__dot"
+                        style={{
+                          borderColor: isSelected
+                            ? meta.color
+                            : "var(--border-strong)",
+                          background: isSelected
+                            ? `${meta.color.replace(")", " / 10%)")}`
+                            : "var(--bg-0)",
+                          boxShadow: isSelected
+                            ? `0 0 0 2px ${meta.color.replace(")", " / 18%)")}`
+                            : "none",
+                        }}
+                      >
+                        <span style={{ fontSize: "0.6rem" }}>{meta.icon}</span>
+                      </div>
+                      <div className="ug-timeline-event__body">
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "baseline",
+                            marginBottom: "0.2rem",
+                          }}
+                        >
+                          <h3
+                            style={{
+                              fontSize: "0.8rem",
+                              fontWeight: 600,
+                              color: isSelected
+                                ? meta.color
+                                : "var(--color-foreground)",
+                              letterSpacing: "-0.01em",
+                            }}
+                          >
+                            {meta.title}
+                          </h3>
+                          <span
+                            style={{
+                              fontFamily: "var(--font-mono)",
+                              fontSize: "0.58rem",
+                              color: "var(--color-muted-foreground)",
+                              flexShrink: 0,
+                              marginLeft: "0.75rem",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {time}
+                          </span>
+                        </div>
+                        <p
+                          style={{
+                            fontSize: "0.73rem",
+                            color: "var(--color-muted-foreground)",
+                            lineHeight: 1.5,
+                            marginBottom: "0.3rem",
+                            wordBreak: "break-word",
+                          }}
+                        >
+                          {detailLine(evt)}
+                        </p>
+                        <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+                          <span
+                            style={{
+                              fontFamily: "var(--font-mono)",
+                              fontSize: "0.58rem",
+                              color: "var(--color-muted-foreground)",
+                            }}
+                          >
+                            {evt.source === "ledger"
+                              ? "Forensic engine ledger"
+                              : "Audit log"}
+                          </span>
+                          {evt.actor && (
+                            <span
+                              style={{
+                                fontFamily: "var(--font-mono)",
+                                fontSize: "0.58rem",
+                                color: "var(--color-muted-foreground)",
+                              }}
+                            >
+                              {evt.actor}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Inspector */}
+          <div style={{ position: "sticky", top: 0 }}>
+            {selectedEvent ? (
+              <div className="ug-surface" style={{ overflow: "hidden" }}>
                 <div
+                  className="ug-panel-header"
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.5rem",
+                    borderLeft: `2px solid ${metaFor(selectedEvent).color}`,
                   }}
                 >
                   <span
@@ -234,123 +333,78 @@ function EvidenceTrail() {
                       fontSize: "0.56rem",
                       letterSpacing: "0.26em",
                       textTransform: "uppercase",
-                      color: TYPE_COLOR[selectedEvent.type],
+                      color: metaFor(selectedEvent).color,
                     }}
                   >
-                    {selectedEvent.type.replace("-", " ")}
+                    {selectedEvent.event_type.replace(/_/g, " ")}
                   </span>
                 </div>
-                <span
-                  style={{
-                    fontFamily: "var(--font-mono)",
-                    fontSize: "0.58rem",
-                    color: "var(--color-muted-foreground)",
-                  }}
-                >
-                  {selectedEvent.confidence}% conf
-                </span>
-              </div>
 
-              <div style={{ padding: "1.1rem 1.25rem" }}>
-                <h3
-                  style={{
-                    fontSize: "0.9rem",
-                    fontWeight: 700,
-                    color: "var(--color-foreground)",
-                    marginBottom: "1rem",
-                    letterSpacing: "-0.02em",
-                    lineHeight: 1.3,
-                  }}
-                >
-                  {selectedEvent.title}
-                </h3>
-
-                {[
-                  { k: "Timestamp", v: selectedEvent.timestamp },
-                  { k: "Method", v: selectedEvent.method },
-                  { k: "Data Source", v: selectedEvent.dataSource },
-                  { k: "Confidence", v: `${selectedEvent.confidence}%` },
-                ].map(({ k, v }) => (
-                  <div key={k} className="ug-data-row">
-                    <span className="ug-data-row__key">{k}</span>
-                    <span className="ug-data-row__value">{v}</span>
-                  </div>
-                ))}
-
-                <div className="ug-divider" />
-
-                <p className="ug-section-title">Supporting Evidence</p>
-                <p
-                  style={{
-                    fontSize: "0.76rem",
-                    color: "var(--color-foreground)",
-                    lineHeight: 1.65,
-                    marginBottom: "1rem",
-                  }}
-                >
-                  {selectedEvent.detail}
-                </p>
-
-                {/* Confidence bar */}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.75rem",
-                  }}
-                >
-                  <div className="ug-risk-bar" style={{ flex: 1 }}>
-                    <div
-                      className="ug-risk-bar__fill"
-                      style={{
-                        width: `${selectedEvent.confidence}%`,
-                        background: TYPE_COLOR[selectedEvent.type],
-                      }}
-                    />
-                  </div>
-                  <span
+                <div style={{ padding: "1.1rem 1.25rem" }}>
+                  <h3
                     style={{
-                      fontFamily: "var(--font-mono)",
-                      fontSize: "0.6rem",
-                      color: TYPE_COLOR[selectedEvent.type],
+                      fontSize: "0.9rem",
                       fontWeight: 700,
-                      flexShrink: 0,
+                      color: "var(--color-foreground)",
+                      marginBottom: "1rem",
+                      letterSpacing: "-0.02em",
                     }}
                   >
-                    {selectedEvent.confidence}%
-                  </span>
+                    {metaFor(selectedEvent).title}
+                  </h3>
+
+                  {[
+                    {
+                      k: "Timestamp",
+                      v: new Date(selectedEvent.occurred_at).toLocaleString("en-IN"),
+                    },
+                    { k: "Source", v: selectedEvent.source === "ledger" ? "Forensic ledger" : "Audit log" },
+                    { k: "Actor", v: selectedEvent.actor ?? "—" },
+                  ].map(({ k, v }) => (
+                    <div key={k} className="ug-data-row">
+                      <span className="ug-data-row__key">{k}</span>
+                      <span className="ug-data-row__value">{v}</span>
+                    </div>
+                  ))}
+
+                  <div className="ug-divider" />
+
+                  <p className="ug-section-title">Details</p>
+                  <pre
+                    style={{
+                      fontSize: "0.7rem",
+                      color: "var(--color-foreground)",
+                      lineHeight: 1.6,
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                      fontFamily: "var(--font-mono)",
+                      margin: 0,
+                    }}
+                  >
+                    {JSON.stringify(selectedEvent.details, null, 2)}
+                  </pre>
                 </div>
+              </div>
+            ) : (
+              <div
+                className="ug-surface"
+                style={{ padding: "2rem", textAlign: "center" }}
+              >
                 <p
                   style={{
                     fontFamily: "var(--font-mono)",
-                    fontSize: "0.56rem",
+                    fontSize: "0.64rem",
                     color: "var(--color-muted-foreground)",
-                    marginTop: "0.3rem",
+                    letterSpacing: "0.08em",
                   }}
                 >
-                  {selectedEvent.dataSource}
+                  SELECT AN EVENT TO INSPECT
                 </p>
               </div>
-            </div>
-          ) : (
-            <div
-              className="ug-surface"
-              style={{ padding: "2rem", textAlign: "center" }}
-            >
-              <p
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "0.64rem",
-                  color: "var(--color-muted-foreground)",
-                  letterSpacing: "0.08em",
-                }}
-              >
-                SELECT AN EVENT TO INSPECT
-              </p>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

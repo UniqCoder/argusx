@@ -92,6 +92,7 @@ async def create_anchor(
             "source_ref": anchor.source_ref,
         },
         actor=current_user.sub,
+        case_id=anchor.case_id,
     )
     logger.info("anchor_registered", extra={"anchor_id": str(anchor.id), "source_ref": anchor.source_ref})
     return AnchorRead.model_validate(anchor)
@@ -177,6 +178,9 @@ async def run_trace(
                 entity_jurisdiction=node.entity_jurisdiction,
                 proof_path=node.proof_path,
                 first_tainted_at=node.first_tainted_at,
+                parent_address=node.parent_address,
+                tx_hash=node.tx_hash,
+                tx_amount=node.tx_amount,
             )
         )
 
@@ -196,6 +200,7 @@ async def run_trace(
         terminal=best_terminal,
     )
     decision = Decision(
+        case_id=anchor.case_id,
         address=anchor.address,
         chain=anchor.chain,
         action=decision_result.action.value,
@@ -218,6 +223,7 @@ async def run_trace(
             "node_count": len(result.nodes), "reproducible_hash": result.reproducible_hash,
         },
         actor=current_user.sub,
+        case_id=anchor.case_id,
     )
     await ledger_engine.append_entry(
         db,
@@ -227,6 +233,7 @@ async def run_trace(
             "reasoning": decision.reasoning,
         },
         actor=current_user.sub,
+        case_id=anchor.case_id,
     )
 
     logger.info(
@@ -365,6 +372,10 @@ def _taint_node_from_row(row: TaintNode) -> TaintNodeRead:
         entity_jurisdiction=row.entity_jurisdiction,
         proof_path=row.proof_path or [],
         still_active=row.terminal_kind not in ("MIXER_BOUNDARY",),
+        parent_address=row.parent_address,
+        tx_hash=row.tx_hash,
+        tx_amount=row.tx_amount,
+        first_tainted_at=row.first_tainted_at,
     )
 
 
@@ -381,6 +392,9 @@ def _build_trace_result(anchor, trace, engine_nodes, engine_terminals, unattribu
             terminal_kind=n.terminal_kind, entity_name=n.entity_name,
             entity_jurisdiction=n.entity_jurisdiction, proof_path=n.proof_path,
             still_active=n.still_active,
+            parent_address=n.parent_address, tx_hash=n.tx_hash,
+            tx_amount=(Decimal(str(round(n.tx_amount, 8))) if n.tx_amount is not None else None),
+            first_tainted_at=n.first_tainted_at,
         )
         for n in engine_nodes
     ]

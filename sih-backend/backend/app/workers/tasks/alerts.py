@@ -3,7 +3,6 @@ app/workers/tasks/alerts.py — Async Celery tasks for alert notification and pr
 
 Triggered on /check-wallet hold/block decisions, executing off the API request path.
 """
-import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -17,6 +16,7 @@ from app.models.alert import Alert
 from app.models.wallet import Wallet
 from app.models.case import Case
 from app.workers.celery_app import celery_app
+from app.workers.tasks._async_utils import run_async
 
 logger = logging.getLogger(__name__)
 
@@ -49,10 +49,12 @@ async def _process_alert_async(
         res = await session.execute(stmt)
         wallet_id = res.scalar_one()
 
-        # 2. Look up case by assigned or open case if case_ref is provided
+        # 2. Look up the specific case named by case_ref — must filter on it,
+        # not just take an arbitrary row, or alerts get attached to the
+        # wrong case.
         case_id = None
         if case_ref:
-            case_stmt = select(Case.id).limit(1)
+            case_stmt = select(Case.id).where(Case.id == case_ref)
             case_res = await session.execute(case_stmt)
             case_id = case_res.scalar_one_or_none()
 
@@ -98,26 +100,11 @@ def notify_alert_task(
     Runs asynchronously off the API response path.
     """
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            task = asyncio.ensure_future(
-                _process_alert_async(chain, address, risk_score, action, case_ref, amount)
+        return run_async(
+            lambda: _process_alert_async(
+                chain, address, risk_score, action, case_ref, amount
             )
-            return "queued"
-        else:
-            return loop.run_until_complete(
-                _process_alert_async(chain, address, risk_score, action, case_ref, amount)
-            )
+        )
     except Exception as exc:
-        try:
-            # Create a new event loop if necessary
-            new_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(new_loop)
-            result = new_loop.run_until_complete(
-                _process_alert_async(chain, address, risk_score, action, case_ref, amount)
-            )
-            new_loop.close()
-            return result
-        except Exception as retry_exc:
-            logger.error("notify_alert_task_failed", extra={"error": str(retry_exc)})
-            raise self.retry(exc=retry_exc, countdown=5)
+        logger.error("notify_alert_task_failed", extra={"error": str(exc)})
+        raise self.retry(exc=exc, countdown=5)

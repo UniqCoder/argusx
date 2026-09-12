@@ -2,35 +2,13 @@
 import { useState } from "react";
 import { useCorrelation } from "@/hooks/use-correlation";
 import { useCaseContext } from "@/store/case-context-store";
-import { MOCK_CASES } from "@/lib/mock-data";
-import type { Chain } from "@/lib/api-types";
+import { BackendOfflineBanner } from "@/components/shared/BackendOfflineBanner";
+import { truncateAddress } from "@/lib/address";
+import type { Chain, Complaint } from "@/lib/api-types";
 
 export const Route = createFileRoute("/dashboard/cross-victim")({
   component: CrossVictim,
 });
-
-// ── Static geo distribution (mock until backend has geo endpoint) ──────────
-const GEO_DATA = [
-  { state: "Maharashtra", count: 4, amount: "₹6.2L" },
-  { state: "Karnataka", count: 3, amount: "₹4.8L" },
-  { state: "Delhi", count: 2, amount: "₹2.1L" },
-  { state: "Tamil Nadu", count: 1, amount: "₹1.7L" },
-];
-
-// ── Pre-built wallet pills from existing cases ─────────────────────────────
-const PRESET_WALLETS = MOCK_CASES.filter((c) => c.traceStatus !== "closed").map(
-  (c) => ({
-    addr: c.reportedWallet,
-    chain: c.blockchain as "BTC" | "ETH" | "TRON" | "BSC" | "Polygon",
-    caseId: c.id,
-    badge:
-      c.traceStatus === "critical"
-        ? "ug-badge--critical"
-        : c.traceStatus === "live-trace"
-          ? "ug-badge--live"
-          : "ug-badge--medium",
-  }),
-);
 
 // ── Animated node graph — 3 victims converging on 1 wallet ────────────────
 const CV_NODES = [
@@ -55,7 +33,8 @@ const NODE_C: Record<string, string> = {
 // ── Page ─────────────────────────────────────────────────────────────────
 function CrossVictim() {
   const navigate = useNavigate();
-  const { setActiveCase, setActiveWallet } = useCaseContext();
+  const { setActiveWallet, recentWallets, recordRecentWallet } =
+    useCaseContext();
 
   const [input, setInput] = useState("");
   const [wallet, setWallet] = useState<string | null>(null);
@@ -63,30 +42,33 @@ function CrossVictim() {
     "BTC" | "ETH" | "TRON" | "BSC" | "Polygon"
   >("ETH");
 
-  const { signal: sig, loading, error } = useCorrelation(wallet, chain as Chain);
+  const {
+    signal: sig,
+    linkedComplaints,
+    loading,
+    error,
+  } = useCorrelation(wallet, chain as Chain);
+
+  // Real, derived from actual complaint filing dates — not a fabricated
+  // constant. Falls back to 0 when there's nothing to derive it from yet.
+  const daysActive = (() => {
+    if (linkedComplaints.length === 0) return 0;
+    const earliest = Math.min(
+      ...linkedComplaints.map((c) => new Date(c.filed_at).getTime()),
+    );
+    return Math.max(0, Math.round((Date.now() - earliest) / 86_400_000));
+  })();
 
   const handleSearch = () => {
     const trimmed = input.trim();
     if (!trimmed) return;
     setWallet(trimmed);
+    recordRecentWallet(trimmed);
   };
 
-  const handlePreset = (addr: string, ch: typeof chain, caseId: string) => {
+  const handlePreset = (addr: string) => {
     setInput(addr);
-    setChain(ch);
     setWallet(addr);
-    // Pre-load the case context too
-    const c = MOCK_CASES.find((m) => m.id === caseId);
-    if (c) {
-      setActiveCase({
-        caseId: c.id,
-        caseNumber: c.id,
-        wallet: c.reportedWallet,
-        chain: c.blockchain as typeof chain,
-        fraudType: c.fraudType,
-        status: c.traceStatus,
-      });
-    }
   };
 
   const handleOpenInvestigation = () => {
@@ -95,14 +77,11 @@ function CrossVictim() {
   };
 
   const sigColor =
-    sig.signalStrength === "HIGH"
+    sig?.signalStrength === "HIGH"
       ? "var(--color-signal)"
-      : sig.signalStrength === "MEDIUM"
+      : sig?.signalStrength === "MEDIUM"
         ? "var(--color-primary)"
         : "var(--color-accent)";
-
-  // Victim rows: use as many mock cases as the correlation returned
-  const victimRows = MOCK_CASES.slice(0, Math.max(sig.complaints, 1));
 
   return (
     <>
@@ -112,12 +91,16 @@ function CrossVictim() {
           <p className="ug-page-header__kicker">Intelligence</p>
           <h1 className="ug-page-header__title">Cross-Victim Correlation</h1>
           <p className="ug-page-header__sub">
-            {wallet
+            {sig
               ? `${sig.victims} victims · ${sig.complaints} complaints · ${sig.states} states — signal: ${sig.signalStrength}`
-              : "One wallet. Many targets. Paste an address to surface every linked victim."}
+              : wallet && loading
+                ? "Correlating…"
+                : wallet && error
+                  ? "Couldn't reach the backend — see below."
+                  : "One wallet. Many targets. Paste an address to surface every linked victim."}
           </p>
         </div>
-        {wallet && (
+        {sig && (
           <span
             className="ug-badge ug-badge--critical"
             style={{
@@ -216,36 +199,48 @@ function CrossVictim() {
               marginBottom: "0.5rem",
             }}
           >
-            Known flagged wallets
+            Recently searched
           </p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
-            {PRESET_WALLETS.map((p) => (
-              <button
-                key={p.addr}
-                onClick={() => handlePreset(p.addr, p.chain, p.caseId)}
-                style={{
-                  padding: "0.28rem 0.65rem",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "0.6rem",
-                  background:
-                    wallet === p.addr
-                      ? "oklch(0.83 0.14 205 / 12%)"
-                      : "var(--bg-2)",
-                  border: `1px solid ${wallet === p.addr ? "var(--color-accent)" : "var(--border-strong)"}`,
-                  borderRadius: "2px",
-                  color:
-                    wallet === p.addr
-                      ? "var(--color-accent)"
-                      : "var(--color-muted-foreground)",
-                  cursor: "pointer",
-                  letterSpacing: "0.04em",
-                  transition: "all 0.12s",
-                }}
-              >
-                {p.addr}
-              </button>
-            ))}
-          </div>
+          {recentWallets.length === 0 ? (
+            <p
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: "0.6rem",
+                color: "var(--color-muted-foreground)",
+              }}
+            >
+              No wallets searched yet this session.
+            </p>
+          ) : (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+              {recentWallets.map((addr) => (
+                <button
+                  key={addr}
+                  onClick={() => handlePreset(addr)}
+                  style={{
+                    padding: "0.28rem 0.65rem",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "0.6rem",
+                    background:
+                      wallet === addr
+                        ? "oklch(0.83 0.14 205 / 12%)"
+                        : "var(--bg-2)",
+                    border: `1px solid ${wallet === addr ? "var(--color-accent)" : "var(--border-strong)"}`,
+                    borderRadius: "2px",
+                    color:
+                      wallet === addr
+                        ? "var(--color-accent)"
+                        : "var(--color-muted-foreground)",
+                    cursor: "pointer",
+                    letterSpacing: "0.04em",
+                    transition: "all 0.12s",
+                  }}
+                >
+                  {truncateAddress(addr)}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -422,8 +417,20 @@ function CrossVictim() {
         </div>
       )}
 
+      {/* ── Loading / offline states (wallet searched, no result yet) ── */}
+      {wallet && !sig && (
+        <div className="ug-surface" style={{ padding: "1rem 1.25rem", marginBottom: "0.75rem" }}>
+          {loading && !error && (
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: "0.62rem", color: "var(--color-muted-foreground)" }}>
+              Correlating…
+            </p>
+          )}
+          <BackendOfflineBanner error={error} context="cross-victim correlation" />
+        </div>
+      )}
+
       {/* ── Results ── */}
-      {wallet && (
+      {wallet && sig && (
         <>
           {/* Summary stat strip */}
           <div className="ug-stat-strip" style={{ marginBottom: "0.75rem" }}>
@@ -450,7 +457,7 @@ function CrossVictim() {
               },
               {
                 label: "Days Active",
-                value: `${sig.daysSinceFirst}d`,
+                value: `${daysActive}d`,
                 accent: "var(--color-muted-foreground)",
               },
             ].map((s) => (
@@ -537,19 +544,26 @@ function CrossVictim() {
               </div>
 
               {/* Rows */}
-              {victimRows.map((c, i) => (
+              {linkedComplaints.length === 0 && (
+                <p
+                  style={{
+                    padding: "1rem 1.25rem",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "0.62rem",
+                    color: "var(--color-muted-foreground)",
+                  }}
+                >
+                  No linked complaints found for this wallet.
+                </p>
+              )}
+              {linkedComplaints.map((c: Complaint, i) => (
                 <div
                   key={c.id}
                   onClick={() => {
-                    setActiveCase({
-                      caseId: c.id,
-                      caseNumber: c.id,
-                      wallet: c.reportedWallet,
-                      chain: c.blockchain as
-                        "BTC" | "ETH" | "TRON" | "BSC" | "Polygon",
-                      fraudType: c.fraudType,
-                      status: c.traceStatus,
-                    });
+                    if (!wallet) return;
+                    // A complaint's own id isn't a Case id — only set what's
+                    // real: the wallet this correlation was run against.
+                    setActiveWallet(wallet, chain);
                     navigate({ to: "/dashboard/investigation" });
                   }}
                   style={{
@@ -557,7 +571,7 @@ function CrossVictim() {
                     gridTemplateColumns: "88px 1fr 90px 100px 100px",
                     padding: "0.7rem 1.25rem",
                     borderBottom:
-                      i < victimRows.length - 1
+                      i < linkedComplaints.length - 1
                         ? "1px solid var(--border-subtle)"
                         : "none",
                     alignItems: "center",
@@ -578,7 +592,7 @@ function CrossVictim() {
                       color: "var(--color-accent)",
                     }}
                   >
-                    {c.id.slice(-5)}
+                    {(c.ncrp_ref ?? c.id).slice(-5)}
                   </span>
                   <div>
                     <p
@@ -589,7 +603,7 @@ function CrossVictim() {
                         marginBottom: "0.15rem",
                       }}
                     >
-                      {c.fraudType}
+                      {c.fraud_typology ?? "Unclassified"}
                     </p>
                     <p
                       style={{
@@ -598,9 +612,9 @@ function CrossVictim() {
                         color: "var(--color-muted-foreground)",
                       }}
                     >
-                      {c.description.length > 52
-                        ? c.description.slice(0, 52) + "…"
-                        : c.description}
+                      {(c.narrative_text ?? "No narrative on file").length > 52
+                        ? (c.narrative_text ?? "").slice(0, 52) + "…"
+                        : (c.narrative_text ?? "No narrative on file")}
                     </p>
                   </div>
                   <span
@@ -610,7 +624,9 @@ function CrossVictim() {
                       color: "var(--color-primary)",
                     }}
                   >
-                    {GEO_DATA[i % GEO_DATA.length]?.amount ?? "—"}
+                    {c.amount_lost != null
+                      ? `₹${c.amount_lost.toLocaleString("en-IN")}`
+                      : "—"}
                   </span>
                   <span
                     style={{
@@ -619,19 +635,13 @@ function CrossVictim() {
                       color: "var(--color-muted-foreground)",
                     }}
                   >
-                    {GEO_DATA[i % GEO_DATA.length]?.state ?? "—"}
+                    {c.state ?? "—"}
                   </span>
                   <span
-                    className={`ug-badge ${
-                      c.traceStatus === "critical"
-                        ? "ug-badge--critical"
-                        : c.traceStatus === "live-trace"
-                          ? "ug-badge--live"
-                          : "ug-badge--medium"
-                    }`}
+                    className="ug-badge ug-badge--medium"
                     style={{ fontSize: "0.5rem", justifySelf: "start" }}
                   >
-                    {c.traceStatus}
+                    {c.source_platform}
                   </span>
                 </div>
               ))}
@@ -687,7 +697,7 @@ function CrossVictim() {
                     { k: "Complaints", v: String(sig.complaints) },
                     { k: "States", v: String(sig.states) },
                     { k: "Funds at Risk", v: sig.totalFundsAtRisk },
-                    { k: "Days Active", v: `${sig.daysSinceFirst}d` },
+                    { k: "Days Active", v: `${daysActive}d` },
                   ].map(({ k, v }) => (
                     <div key={k} className="ug-data-row">
                       <span className="ug-data-row__key">{k}</span>
@@ -723,71 +733,6 @@ function CrossVictim() {
                 </div>
               </div>
 
-              {/* Geographic distribution */}
-              <div className="ug-surface" style={{ overflow: "hidden" }}>
-                <div className="ug-panel-header">
-                  <span
-                    className="ug-section-title"
-                    style={{ marginBottom: 0 }}
-                  >
-                    Geographic Spread
-                  </span>
-                </div>
-                <div style={{ padding: "0.75rem 1.25rem 1rem" }}>
-                  {GEO_DATA.map((g, i) => {
-                    const pct = Math.min(
-                      100,
-                      Math.round((g.count / Math.max(sig.victims, 1)) * 100),
-                    );
-                    return (
-                      <div
-                        key={g.state}
-                        style={{
-                          marginBottom: i < GEO_DATA.length - 1 ? "0.75rem" : 0,
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "baseline",
-                            marginBottom: "0.25rem",
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontFamily: "var(--font-mono)",
-                              fontSize: "0.62rem",
-                              color: "var(--color-foreground)",
-                            }}
-                          >
-                            {g.state}
-                          </span>
-                          <span
-                            style={{
-                              fontFamily: "var(--font-mono)",
-                              fontSize: "0.58rem",
-                              color: "var(--color-muted-foreground)",
-                            }}
-                          >
-                            {g.count} · {g.amount}
-                          </span>
-                        </div>
-                        <div className="ug-risk-bar">
-                          <div
-                            className="ug-risk-bar__fill"
-                            style={{
-                              width: `${pct}%`,
-                              background: "var(--color-accent)",
-                            }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
               {/* Backend offline notice */}
               {error && (
                 <div
@@ -802,7 +747,7 @@ function CrossVictim() {
                     lineHeight: 1.6,
                   }}
                 >
-                  Backend offline — showing mock data.
+                  Couldn't reach the backend — {error}
                 </div>
               )}
             </div>

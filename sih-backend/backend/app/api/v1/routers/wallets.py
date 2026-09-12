@@ -11,11 +11,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.deps import CurrentUserDep
+from app.api.v1.deps import CurrentUserDep, InvestigatorOrAdminDep
 from app.db.session import get_db
+from app.schemas.check_wallet import CheckWalletRequest, CheckWalletResponse
 from app.schemas.common import Chain, ErrorEnvelope
 from app.schemas.wallet import RiskResponse, TraceResponse
-from app.services import risk_service, tracing_service
+from app.services import registry_service, risk_service, tracing_service
 
 logger = structlog.get_logger(__name__)
 
@@ -84,3 +85,46 @@ async def get_wallet_risk(
         chain=chain,
     )
     return result
+
+
+@router.post(
+    "/deposit-check",
+    response_model=CheckWalletResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        401: {"model": ErrorEnvelope, "description": "Unauthorized"},
+        403: {"model": ErrorEnvelope, "description": "Forbidden"},
+        422: {"model": ErrorEnvelope, "description": "Validation error"},
+    },
+    summary="Investigator-facing deposit chokepoint check (Deposit Watch page)",
+)
+async def deposit_check(
+    body: CheckWalletRequest,
+    current_user: InvestigatorOrAdminDep,
+) -> CheckWalletResponse:
+    """
+    Same Redis risk-registry lookup as the external VASP-facing /check-wallet
+    hot path, gated by investigator JWT auth instead of a VASP API key so the
+    Deposit Watch dashboard page can run the real check without exposing the
+    VASP API key to the browser.
+    """
+    if body.chain not in (Chain.BTC, Chain.ETH, Chain.TRON):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": {
+                    "code": "UNSUPPORTED_CHAIN",
+                    "message": f"Blockchain network '{body.chain.value}' is not supported for risk check. Supported networks: BTC, ETH, TRON.",
+                    "details": {"chain": body.chain.value},
+                }
+            },
+        )
+
+    redis_client = registry_service.get_redis_client()
+    score, action, case_ref = await registry_service.check_wallet_hot_path(
+        redis_client=redis_client,
+        chain=body.chain.value,
+        address=body.address,
+        amount=body.amount,
+    )
+    return CheckWalletResponse(risk_score=score, action=action, case_ref=case_ref)

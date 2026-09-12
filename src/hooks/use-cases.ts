@@ -1,15 +1,12 @@
 // ============================================================
 // useCases — fetches GET /api/v1/cases
-// Falls back to MOCK_CASES when backend unreachable.
+// Real data only — a genuine empty result stays empty; no mock
+// fallback on error or on zero cases.
 // ============================================================
 import { useState, useEffect } from "react";
 import { listCases } from "@/lib/api";
 import type { Case, CaseStatus as ApiStatus } from "@/lib/api-types";
-import {
-  MOCK_CASES,
-  type InvestigationCase,
-  type CaseStatus,
-} from "@/lib/mock-data";
+import type { InvestigationCase, CaseStatus } from "@/lib/mock-data";
 
 const STATUS_MAP: Record<ApiStatus, CaseStatus> = {
   new: "live-trace",
@@ -28,23 +25,31 @@ const LABEL_MAP: Record<CaseStatus, string> = {
   closed: "Closed",
 };
 
-function mapCase(c: Case, i: number): InvestigationCase {
+// The backend Case model doesn't carry fraud type or victim count directly
+// (those live on the Complaint, which this list endpoint doesn't join) —
+// left genuinely unknown rather than fabricated. Wallet/chain/risk DO come
+// from the API's real `wallets` join: the first linked wallet, when one
+// exists.
+function mapCase(c: Case): InvestigationCase {
+  const wallet = c.wallets[0];
   return {
     id: `UG-${c.id.slice(0, 8).toUpperCase()}`,
-    fraudType: "Investment Scam",
-    blockchain: "ETH",
-    reportedWallet: "0x" + c.id.replace(/-/g, "").slice(0, 8) + "...",
+    rawId: c.id,
+    fraudType: "Unclassified",
+    blockchain: (wallet?.chain as InvestigationCase["blockchain"]) ?? "ETH",
+    reportedWallet: wallet?.address ?? "",
     traceStatus: STATUS_MAP[c.status] ?? "live-trace",
-    networkSignal: i % 3 === 0 ? "HIGH" : i % 3 === 1 ? "MEDIUM" : "NONE",
-    riskScore: Math.max(40, 95 - i * 7),
-    victimCount: Math.max(1, 5 - i),
+    networkSignal: "NONE",
+    riskScore:
+      wallet?.risk_score != null ? Math.round(wallet.risk_score * 100) : 0,
+    victimCount: 0,
     lastActivity: new Date(c.opened_at).toLocaleDateString("en-IN"),
     description: `Case opened by ${c.assigned_investigator ?? "unassigned"}. Status: ${c.status}.`,
   };
 }
 
 export function useCases(filterLabel?: string) {
-  const [allCases, setAllCases] = useState<InvestigationCase[]>(MOCK_CASES);
+  const [allCases, setAllCases] = useState<InvestigationCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,16 +60,15 @@ export function useCases(filterLabel?: string) {
     listCases({ page: 1, page_size: 50 })
       .then((data) => {
         if (!cancelled) {
-          setAllCases(
-            data.items.length > 0 ? data.items.map(mapCase) : MOCK_CASES,
-          );
+          setAllCases(data.items.map(mapCase));
           setError(null);
         }
       })
       .catch((e) => {
-        if (!cancelled)
+        if (!cancelled) {
+          setAllCases([]);
           setError(e instanceof Error ? e.message : "Failed to load cases");
-        // MOCK_CASES already set as initial state
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

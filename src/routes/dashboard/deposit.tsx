@@ -1,103 +1,94 @@
-﻿import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useCaseContext } from "@/store/case-context-store";
-import { MOCK_CASES } from "@/lib/mock-data";
+import { checkDeposit } from "@/lib/api";
+import { ApiRequestError } from "@/lib/api";
+import type { AlertAction, Chain } from "@/lib/api-types";
 
 export const Route = createFileRoute("/dashboard/deposit")({
   component: DepositWatch,
 });
 
-// Chains the user can pick
-const CHAINS = ["Ethereum", "Bitcoin", "TRON", "BSC", "Polygon"] as const;
-type Chain = (typeof CHAINS)[number];
-
-const CHECK_STEPS = [
-  {
-    key: "registry",
-    label: "Wallet Registry Check",
-    detail: "Cross-referencing NCRP complaint database",
-  },
-  {
-    key: "risk",
-    label: "Risk Intelligence Score",
-    detail: "Running XGBoost risk model on wallet history",
-  },
-  {
-    key: "complaints",
-    label: "Complaint Correlation",
-    detail: "Matching linked victim complaints",
-  },
-  {
-    key: "signals",
-    label: "Network Signal Analysis",
-    detail: "Checking cross-chain wallet clustering",
-  },
+const CHAIN_OPTIONS: { label: string; value: Chain }[] = [
+  { label: "Ethereum", value: "ETH" },
+  { label: "Bitcoin", value: "BTC" },
+  { label: "TRON", value: "TRON" },
 ];
 
-type Phase = "idle" | "checking" | "result";
+type Phase = "idle" | "checking" | "result" | "error";
 
 function DepositWatch() {
   const navigate = useNavigate();
-  const { setActiveCase } = useCaseContext();
+  const { setActiveWallet } = useCaseContext();
 
-  // User-editable inputs
-  const [wallet, setWallet] = useState("0xA7F...82B");
-  const [amount, setAmount] = useState("4.82");
-  const [chain, setChain] = useState<Chain>("Ethereum");
+  const [wallet, setWallet] = useState("");
+  const [amount, setAmount] = useState("1.0");
+  const [chain, setChain] = useState<Chain>("ETH");
 
-  // Simulation state
   const [phase, setPhase] = useState<Phase>("idle");
-  const [visible, setVisible] = useState<string[]>([]);
-  const [action, setAction] = useState<"flagged" | "allowed" | null>(null);
+  const [result, setResult] = useState<{
+    riskScore: number;
+    action: AlertAction;
+    caseRef: string | null;
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<"flagged" | "allowed" | null>(null);
 
-  // Result derived from input (higher amount = higher simulated risk)
-  const parsedAmount = parseFloat(amount) || 0;
-  const riskScore = Math.min(98, Math.round(60 + parsedAmount * 3));
-  const isFlagged = riskScore > 70;
-  const scoreColor =
-    riskScore > 80
-      ? "var(--color-signal)"
-      : riskScore > 55
-        ? "var(--color-primary)"
-        : "var(--color-accent)";
-
-  const simulate = () => {
+  const run = async () => {
     if (!wallet.trim()) return;
+    const parsedAmount = parseFloat(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) return;
     setPhase("checking");
-    setVisible([]);
-    setAction(null);
-    CHECK_STEPS.forEach(({ key }, i) => {
-      setTimeout(() => setVisible((v) => [...v, key]), 450 + i * 420);
-    });
-    setTimeout(() => setPhase("result"), 450 + CHECK_STEPS.length * 420 + 300);
+    setResult(null);
+    setError(null);
+    setOutcome(null);
+    try {
+      const res = await checkDeposit({
+        address: wallet.trim(),
+        chain,
+        amount: parsedAmount,
+      });
+      setResult({
+        riskScore: Math.round(res.risk_score * 100),
+        action: res.action,
+        caseRef: res.case_ref ?? null,
+      });
+      setPhase("result");
+    } catch (e) {
+      const message =
+        e instanceof ApiRequestError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : "Deposit check failed";
+      setError(message);
+      setPhase("error");
+    }
   };
 
   const reset = () => {
     setPhase("idle");
-    setVisible([]);
-    setAction(null);
+    setResult(null);
+    setError(null);
+    setOutcome(null);
   };
 
+  const isFlagged = result ? result.action !== "allow" : false;
+  const scoreColor = !result
+    ? "var(--color-accent)"
+    : result.action === "block"
+      ? "var(--color-signal)"
+      : result.action === "hold"
+        ? "var(--color-primary)"
+        : "var(--color-accent)";
+
   const handleFlagAndInvestigate = () => {
-    setAction("flagged");
-    // Load the closest matching mock case into context then open investigation
-    const matched =
-      MOCK_CASES.find(
-        (c) => c.blockchain === chain || c.traceStatus === "critical",
-      ) ?? MOCK_CASES[0]!;
-    setActiveCase({
-      caseId: matched.id,
-      caseNumber: matched.id,
-      wallet: wallet,
-      chain: chain as "BTC" | "ETH" | "TRON" | "BSC" | "Polygon",
-      fraudType: matched.fraudType,
-      status: matched.traceStatus,
-    });
+    setOutcome("flagged");
+    setActiveWallet(wallet.trim(), chain);
   };
 
   return (
     <>
-      {/* Header */}
       <div className="ug-page-header">
         <div className="ug-page-header__left">
           <p className="ug-page-header__kicker">Operations</p>
@@ -106,7 +97,8 @@ function DepositWatch() {
             className="ug-page-header__sub"
             style={{ color: "var(--color-primary)" }}
           >
-            Stop the money before cash-out — real-time VASP chokepoint check.
+            Check a wallet against the real-time VASP risk registry before
+            crediting a deposit.
           </p>
         </div>
         <div className="ug-system-live" style={{ fontSize: "0.58rem" }}>
@@ -115,15 +107,7 @@ function DepositWatch() {
         </div>
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 300px",
-          gap: "1rem",
-          alignItems: "start",
-        }}
-      >
-        {/* ── Left column: simulation ── */}
+      <div style={{ maxWidth: 680, margin: "0 auto" }}>
         <div
           style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}
         >
@@ -133,62 +117,19 @@ function DepositWatch() {
             style={{ overflow: "hidden" }}
           >
             <div className="ug-panel-header">
-              <div>
-                <p
-                  style={{
-                    fontFamily: "var(--font-mono)",
-                    fontSize: "0.56rem",
-                    letterSpacing: "0.3em",
-                    textTransform: "uppercase",
-                    color:
-                      phase === "idle"
-                        ? "var(--color-muted-foreground)"
-                        : "var(--color-signal)",
-                    marginBottom: "0.25rem",
-                  }}
-                >
-                  {phase === "idle"
-                    ? "INCOMING DEPOSIT — ENTER DETAILS"
-                    : "NEW DEPOSIT DETECTED"}
-                </p>
-                <p
-                  style={{
-                    fontFamily: "var(--font-mono)",
-                    fontSize: "0.9rem",
-                    fontWeight: 700,
-                    color: "var(--color-foreground)",
-                    letterSpacing: "0.04em",
-                  }}
-                >
-                  {wallet || "—"}
-                </p>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <p
-                  style={{
-                    fontFamily: "var(--font-mono)",
-                    fontSize: "0.54rem",
-                    letterSpacing: "0.18em",
-                    textTransform: "uppercase",
-                    color: "var(--color-muted-foreground)",
-                    marginBottom: "0.2rem",
-                  }}
-                >
-                  Chain
-                </p>
-                <p
-                  style={{
-                    fontFamily: "var(--font-mono)",
-                    fontSize: "0.78rem",
-                    color: "var(--color-accent)",
-                  }}
-                >
-                  {chain}
-                </p>
-              </div>
+              <span
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "0.56rem",
+                  letterSpacing: "0.3em",
+                  textTransform: "uppercase",
+                  color: "var(--color-muted-foreground)",
+                }}
+              >
+                INCOMING DEPOSIT — ENTER DETAILS
+              </span>
             </div>
 
-            {/* Editable fields — only shown when idle */}
             {phase === "idle" && (
               <div
                 style={{
@@ -198,7 +139,6 @@ function DepositWatch() {
                   gap: "0.75rem",
                 }}
               >
-                {/* Wallet input */}
                 <div>
                   <label
                     style={{
@@ -229,16 +169,9 @@ function DepositWatch() {
                       color: "var(--color-foreground)",
                       outline: "none",
                     }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = "var(--color-accent)";
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = "var(--border-strong)";
-                    }}
                   />
                 </div>
 
-                {/* Amount + Chain row */}
                 <div
                   style={{
                     display: "grid",
@@ -266,6 +199,7 @@ function DepositWatch() {
                       placeholder="0.00"
                       type="number"
                       min="0"
+                      step="any"
                       style={{
                         width: "100%",
                         boxSizing: "border-box",
@@ -277,12 +211,6 @@ function DepositWatch() {
                         fontSize: "0.82rem",
                         color: "var(--color-foreground)",
                         outline: "none",
-                      }}
-                      onFocus={(e) => {
-                        e.target.style.borderColor = "var(--color-accent)";
-                      }}
-                      onBlur={(e) => {
-                        e.target.style.borderColor = "var(--border-strong)";
                       }}
                     />
                   </div>
@@ -317,9 +245,9 @@ function DepositWatch() {
                         cursor: "pointer",
                       }}
                     >
-                      {CHAINS.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
+                      {CHAIN_OPTIONS.map((c) => (
+                        <option key={c.value} value={c.value}>
+                          {c.label}
                         </option>
                       ))}
                     </select>
@@ -328,7 +256,7 @@ function DepositWatch() {
 
                 <button
                   className="ug-btn-primary"
-                  onClick={simulate}
+                  onClick={run}
                   disabled={!wallet.trim()}
                   style={{
                     width: "100%",
@@ -342,166 +270,61 @@ function DepositWatch() {
               </div>
             )}
 
-            {/* Read-only meta row shown once checking starts */}
-            {phase !== "idle" && (
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
-                  borderTop: "1px solid var(--border-strong)",
-                }}
-              >
-                {[
-                  {
-                    k: "Amount",
-                    v: `${amount} ${chain === "Ethereum" ? "ETH" : chain === "Bitcoin" ? "BTC" : chain === "TRON" ? "TRX" : chain === "BSC" ? "BNB" : "MATIC"}`,
-                    c: "var(--color-primary)",
-                  },
-                  {
-                    k: "Destination",
-                    v: "Exchange Sandbox",
-                    c: "var(--color-foreground)",
-                  },
-                  { k: "Chain", v: chain, c: "var(--color-accent)" },
-                ].map(({ k, v, c }, i) => (
-                  <div
-                    key={k}
-                    style={{
-                      background: "var(--bg-2)",
-                      padding: "0.75rem 1rem",
-                      borderRight:
-                        i < 2 ? "1px solid var(--border-strong)" : "none",
-                    }}
-                  >
-                    <p
-                      style={{
-                        fontFamily: "var(--font-mono)",
-                        fontSize: "0.54rem",
-                        letterSpacing: "0.2em",
-                        textTransform: "uppercase",
-                        color: "var(--color-muted-foreground)",
-                        marginBottom: "0.25rem",
-                      }}
-                    >
-                      {k}
-                    </p>
-                    <p
-                      style={{
-                        fontFamily: "var(--font-mono)",
-                        fontSize: "0.78rem",
-                        color: c,
-                        fontWeight: 600,
-                      }}
-                    >
-                      {v}
-                    </p>
-                  </div>
-                ))}
+            {phase === "checking" && (
+              <div style={{ padding: "1.25rem" }}>
+                <p
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "0.68rem",
+                    color: "var(--color-muted-foreground)",
+                  }}
+                >
+                  Querying risk registry…
+                </p>
               </div>
             )}
           </div>
 
-          {/* Checklist */}
-          {phase !== "idle" && (
-            <div className="ug-surface" style={{ overflow: "hidden" }}>
-              <div className="ug-panel-header">
-                <span className="ug-section-title" style={{ marginBottom: 0 }}>
-                  Checking Intelligence Registry
-                </span>
-                {phase === "checking" && (
-                  <span
-                    style={{
-                      fontFamily: "var(--font-mono)",
-                      fontSize: "0.56rem",
-                      color: "var(--color-accent)",
-                      letterSpacing: "0.12em",
-                    }}
-                  >
-                    {visible.length}/{CHECK_STEPS.length} DONE
-                  </span>
-                )}
-              </div>
-              <div style={{ padding: "0.5rem 1.25rem 1rem" }}>
-                {CHECK_STEPS.map(({ key, label, detail }) => {
-                  const done = visible.includes(key);
-                  return (
-                    <div
-                      key={key}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.85rem",
-                        padding: "0.6rem 0",
-                        borderBottom: "1px solid var(--border-subtle)",
-                        opacity: done ? 1 : 0.38,
-                        transition: "opacity 0.3s ease",
-                      }}
-                    >
-                      <span
-                        style={{
-                          width: 18,
-                          height: 18,
-                          flexShrink: 0,
-                          border: `1.5px solid ${done ? "var(--color-accent)" : "var(--border-strong)"}`,
-                          borderRadius: "2px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          color: "var(--color-accent)",
-                          fontSize: "0.6rem",
-                          background: done
-                            ? "oklch(0.83 0.14 205 / 10%)"
-                            : "transparent",
-                          transition: "all 0.2s",
-                        }}
-                      >
-                        {done ? "✓" : ""}
-                      </span>
-                      <div style={{ flex: 1 }}>
-                        <p
-                          style={{
-                            fontSize: "0.76rem",
-                            color: done
-                              ? "var(--color-foreground)"
-                              : "var(--color-muted-foreground)",
-                            fontWeight: 500,
-                            marginBottom: "0.1rem",
-                          }}
-                        >
-                          {label}
-                        </p>
-                        <p
-                          style={{
-                            fontFamily: "var(--font-mono)",
-                            fontSize: "0.58rem",
-                            color: "var(--color-muted-foreground)",
-                          }}
-                        >
-                          {detail}
-                        </p>
-                      </div>
-                      {done && (
-                        <span
-                          style={{
-                            fontFamily: "var(--font-mono)",
-                            fontSize: "0.58rem",
-                            color: "var(--color-accent)",
-                            letterSpacing: "0.1em",
-                            flexShrink: 0,
-                          }}
-                        >
-                          CLEAR
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+          {phase === "error" && (
+            <div
+              className="ug-surface"
+              style={{
+                padding: "1rem 1.25rem",
+                borderLeft: "2px solid var(--color-signal)",
+              }}
+            >
+              <p
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "0.72rem",
+                  fontWeight: 700,
+                  color: "var(--color-signal)",
+                  marginBottom: "0.4rem",
+                }}
+              >
+                Deposit check failed
+              </p>
+              <p
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "0.64rem",
+                  color: "var(--color-muted-foreground)",
+                  marginBottom: "0.85rem",
+                }}
+              >
+                {error}
+              </p>
+              <button
+                className="ug-btn-ghost"
+                onClick={reset}
+                style={{ padding: "0.35rem 0.85rem", fontSize: "0.64rem" }}
+              >
+                Try Again
+              </button>
             </div>
           )}
 
-          {/* Risk assessment result */}
-          {phase === "result" && !action && (
+          {phase === "result" && result && !outcome && (
             <div
               className={`ug-surface${isFlagged ? " ug-surface--critical" : ""}`}
               style={{
@@ -521,12 +344,12 @@ function DepositWatch() {
                       : "var(--color-accent)",
                   }}
                 >
-                  RISK ASSESSMENT COMPLETE
+                  RISK REGISTRY RESULT
                 </span>
                 <span
                   className={`ug-badge ${isFlagged ? "ug-badge--critical" : "ug-badge--medium"}`}
                 >
-                  {isFlagged ? "FLAGGED WALLET" : "LOW RISK"}
+                  {result.action.toUpperCase()}
                 </span>
               </div>
 
@@ -549,7 +372,7 @@ function DepositWatch() {
                       lineHeight: 1,
                     }}
                   >
-                    {riskScore}
+                    {result.riskScore}
                   </p>
                   <p
                     style={{
@@ -565,23 +388,19 @@ function DepositWatch() {
                 <div>
                   {[
                     { k: "Wallet", v: wallet },
+                    { k: "Chain", v: chain },
                     {
-                      k: "Matched Complaints",
-                      v: isFlagged ? "4 linked" : "None",
-                      c: isFlagged
-                        ? "var(--color-signal)"
-                        : "var(--color-accent)",
-                    },
-                    {
-                      k: "Network Signal",
-                      v: isFlagged ? "HIGH" : "LOW",
-                      c: isFlagged
-                        ? "var(--color-signal)"
-                        : "var(--color-accent)",
+                      k: "Linked Case",
+                      v: result.caseRef ?? "None on file",
                     },
                     {
                       k: "Recommended Action",
-                      v: isFlagged ? "Flag for Review" : "Allow",
+                      v:
+                        result.action === "block"
+                          ? "Block deposit"
+                          : result.action === "hold"
+                            ? "Hold for review"
+                            : "Allow",
                       c: isFlagged
                         ? "var(--color-signal)"
                         : "var(--color-accent)",
@@ -605,7 +424,10 @@ function DepositWatch() {
                   <div className="ug-risk-bar" style={{ marginTop: "0.75rem" }}>
                     <div
                       className="ug-risk-bar__fill"
-                      style={{ width: `${riskScore}%`, background: scoreColor }}
+                      style={{
+                        width: `${result.riskScore}%`,
+                        background: scoreColor,
+                      }}
                     />
                   </div>
                 </div>
@@ -634,7 +456,7 @@ function DepositWatch() {
                     </button>
                     <button
                       className="ug-btn-ghost"
-                      onClick={() => setAction("allowed")}
+                      onClick={() => setOutcome("allowed")}
                       style={{ flexShrink: 0, padding: "0 1rem" }}
                     >
                       Override / Allow
@@ -643,7 +465,7 @@ function DepositWatch() {
                 ) : (
                   <button
                     className="ug-btn-primary"
-                    onClick={() => setAction("allowed")}
+                    onClick={() => setOutcome("allowed")}
                     style={{ flex: 1, justifyContent: "center" }}
                   >
                     Allow Transaction
@@ -653,13 +475,12 @@ function DepositWatch() {
             </div>
           )}
 
-          {/* Outcome confirmation */}
-          {action && (
+          {outcome && (
             <div
               className="ug-surface"
               style={{
                 padding: "1rem 1.25rem",
-                borderLeft: `2px solid ${action === "flagged" ? "var(--color-signal)" : "var(--color-accent)"}`,
+                borderLeft: `2px solid ${outcome === "flagged" ? "var(--color-signal)" : "var(--color-accent)"}`,
                 animation: "ug-check-in 0.25s ease both",
               }}
             >
@@ -669,30 +490,18 @@ function DepositWatch() {
                   fontSize: "0.72rem",
                   fontWeight: 700,
                   color:
-                    action === "flagged"
+                    outcome === "flagged"
                       ? "var(--color-signal)"
                       : "var(--color-accent)",
                   marginBottom: "0.4rem",
                 }}
               >
-                {action === "flagged"
-                  ? "Wallet flagged for review. Case created."
-                  : "Transaction allowed. Passive monitoring active."}
-              </p>
-              <p
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "0.6rem",
-                  color: "var(--color-muted-foreground)",
-                  marginBottom: "0.85rem",
-                }}
-              >
-                {action === "flagged"
-                  ? `Wallet ${wallet} has been escalated. Freeze request logged for ${chain} chain.`
-                  : `Wallet ${wallet} passed the check. Low-priority watch activated.`}
+                {outcome === "flagged"
+                  ? "Wallet flagged. Set as active wallet for investigation."
+                  : "Deposit allowed."}
               </p>
               <div style={{ display: "flex", gap: "0.5rem" }}>
-                {action === "flagged" && (
+                {outcome === "flagged" && (
                   <button
                     className="ug-btn-primary"
                     onClick={() => navigate({ to: "/dashboard/investigation" })}
@@ -711,176 +520,6 @@ function DepositWatch() {
               </div>
             </div>
           )}
-        </div>
-
-        {/* ── Right column: API panel ── */}
-        <div className="ug-surface" style={{ overflow: "hidden" }}>
-          <div className="ug-panel-header">
-            <span className="ug-section-title" style={{ marginBottom: 0 }}>
-              API Integration
-            </span>
-            <span
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "0.54rem",
-                color: "var(--color-accent)",
-                letterSpacing: "0.08em",
-              }}
-            >
-              REST
-            </span>
-          </div>
-
-          <div style={{ padding: "1rem" }}>
-            <p
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "0.6rem",
-                color: "var(--color-accent)",
-                marginBottom: "0.85rem",
-                letterSpacing: "0.06em",
-              }}
-            >
-              POST /v1/check-deposit
-            </p>
-
-            <p
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "0.54rem",
-                letterSpacing: "0.22em",
-                textTransform: "uppercase",
-                color: "var(--color-muted-foreground)",
-                marginBottom: "0.35rem",
-              }}
-            >
-              Request
-            </p>
-            <pre
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "0.65rem",
-                color: "var(--color-foreground)",
-                background: "var(--bg-2)",
-                border: "1px solid var(--border-subtle)",
-                borderRadius: "2px",
-                padding: "0.75rem",
-                marginBottom: "1rem",
-                overflow: "auto",
-                lineHeight: 1.7,
-              }}
-            >{`{
-  "address": "${wallet || "0x..."}",
-  "amount": "${amount || "0"}",
-  "chain": "${chain.toLowerCase()}"
-}`}</pre>
-
-            <p
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "0.54rem",
-                letterSpacing: "0.22em",
-                textTransform: "uppercase",
-                color: "var(--color-muted-foreground)",
-                marginBottom: "0.35rem",
-              }}
-            >
-              Response
-            </p>
-            <pre
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "0.65rem",
-                background: "var(--bg-2)",
-                border: "1px solid var(--border-subtle)",
-                borderLeft: `2px solid ${phase === "result" ? scoreColor : "var(--border-strong)"}`,
-                borderRadius: "2px",
-                padding: "0.75rem",
-                overflow: "auto",
-                lineHeight: 1.7,
-                color: "var(--color-foreground)",
-                transition: "border-color 0.3s",
-              }}
-            >
-              {phase === "result"
-                ? `{
-  "risk_score": ${riskScore},
-  "flagged": ${isFlagged},
-  "matched_complaints": ${isFlagged ? 4 : 0},
-  "network_signal": "${isFlagged ? "HIGH" : "LOW"}",
-  "recommended_action":
-    "${isFlagged ? "flag_for_review" : "allow"}",
-  "trace_id": "UG-2026-04821"
-}`
-                : `{
-  "risk_score": ...,
-  "flagged": ...,
-  "matched_complaints": ...,
-  "network_signal": "...",
-  "recommended_action": "...",
-  "trace_id": "..."
-}`}
-            </pre>
-
-            <div className="ug-divider" />
-
-            {/* What this feature does — plain language */}
-            <p
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "0.54rem",
-                letterSpacing: "0.22em",
-                textTransform: "uppercase",
-                color: "var(--color-muted-foreground)",
-                margin: "0.75rem 0 0.5rem",
-              }}
-            >
-              What this does
-            </p>
-            <p
-              style={{
-                fontSize: "0.72rem",
-                color: "var(--color-muted-foreground)",
-                lineHeight: 1.7,
-                marginBottom: "0.85rem",
-              }}
-            >
-              When a criminal's wallet tries to deposit into a crypto exchange,
-              the exchange calls this API{" "}
-              <strong style={{ color: "var(--color-foreground)" }}>
-                before processing the transaction
-              </strong>
-              . If the wallet is linked to fraud complaints, Argus returns a
-              flag — and the exchange can freeze the deposit before the criminal
-              cashes out.
-            </p>
-
-            {[
-              { icon: "◈", text: "< 200ms latency" },
-              { icon: "◈", text: "99.9% uptime SLA" },
-              { icon: "◈", text: "FATF-compliant output" },
-              { icon: "◈", text: "Webhook alerts" },
-            ].map(({ icon, text }) => (
-              <div
-                key={text}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.55rem",
-                  padding: "0.32rem 0",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "0.63rem",
-                  color: "var(--color-muted-foreground)",
-                  borderBottom: "1px solid var(--border-subtle)",
-                }}
-              >
-                <span style={{ color: "var(--color-accent)", flexShrink: 0 }}>
-                  {icon}
-                </span>
-                {text}
-              </div>
-            ))}
-          </div>
         </div>
       </div>
     </>

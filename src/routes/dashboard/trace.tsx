@@ -9,51 +9,72 @@ export const Route = createFileRoute("/dashboard/trace")({
 const CHAINS = ["Ethereum", "Bitcoin", "TRON", "BSC", "Polygon"] as const;
 type Chain = (typeof CHAINS)[number];
 
-const CHAIN_META: Record<Chain, { symbol: string; color: string }> = {
-  Ethereum: { symbol: "ETH", color: "oklch(0.72 0.12 270)" },
-  Bitcoin: { symbol: "BTC", color: "oklch(0.79 0.15 74)" },
-  TRON: { symbol: "TRX", color: "oklch(0.64 0.22 18)" },
-  BSC: { symbol: "BNB", color: "oklch(0.84 0.14 90)" },
-  Polygon: { symbol: "MATIC", color: "oklch(0.72 0.18 290)" },
+// `symbol` is the display ticker shown on the chain-selector buttons.
+// `chainId` is the actual backend Chain identifier — these differ for TRON
+// (ticker "TRX" vs. backend value "TRON"). Conflating the two used to mean
+// every TRON trace request silently sent the wrong value.
+const CHAIN_META: Record<
+  Chain,
+  { symbol: string; chainId: "BTC" | "ETH" | "TRON" | "BSC" | "Polygon"; color: string }
+> = {
+  Ethereum: { symbol: "ETH", chainId: "ETH", color: "oklch(0.72 0.12 270)" },
+  Bitcoin: { symbol: "BTC", chainId: "BTC", color: "oklch(0.79 0.15 74)" },
+  TRON: { symbol: "TRX", chainId: "TRON", color: "oklch(0.64 0.22 18)" },
+  BSC: { symbol: "BNB", chainId: "BSC", color: "oklch(0.84 0.14 90)" },
+  Polygon: { symbol: "MATIC", chainId: "Polygon", color: "oklch(0.72 0.18 290)" },
 };
 
+// Real addresses, verified end-to-end against the live v2 taint-propagation
+// engine — chosen specifically because each demonstrates a different real
+// engine capability, not just "this string parses":
+//   ETH:  a real wallet with genuine outgoing branching (multi-hop, several
+//         active + dust-terminated children)
+//   TRON: a real wallet with deep genuine branching (40+ nodes across 6 hops)
+//   BTC:  a real known-VASP address — the engine attributes it to Binance
+//         at hop 0 from the live known-entity registry, not a guess
+// (A contract address like a token contract, or a wallet that's only ever
+// received funds, will honestly show 0 outgoing hops — that's correct
+// behavior, not a bug, so these three were picked to avoid that dead end.)
 const EXAMPLES = [
   {
-    label: "ETH � High Risk",
-    addr: "0x7A92...B4C1",
+    label: "ETH — Real Branching",
+    addr: "0xb8aEccC3ab76a0a1FB807244205B1E3f88C86B89",
     chain: "Ethereum" as Chain,
-    badge: "ug-badge--critical",
+    badge: "ug-badge--live",
   },
   {
-    label: "TRON � Live Trace",
-    addr: "TXqA8...72Bc",
+    label: "TRON — Real Branching",
+    addr: "TTaTPaA1TnQcXwCJ1jbMfkiUKdmuhVbUk6",
     chain: "TRON" as Chain,
     badge: "ug-badge--live",
   },
   {
-    label: "BTC � Evidence Ready",
-    addr: "1A1z...mXVf",
+    label: "BTC — Known VASP",
+    addr: "34xp4vRoCGJym3xR7yCVPFHoCNxv4Twseo",
     chain: "Bitcoin" as Chain,
-    badge: "ug-badge--medium",
+    badge: "ug-badge--live",
   },
 ];
+
+// The backend only traces these three chains today — BSC/Polygon are UI
+// options with no backend support yet, not silently-wrong data.
+const BACKEND_SUPPORTED = new Set(["BTC", "ETH", "TRON"]);
 
 function TraceWallet() {
   const [address, setAddress] = useState("");
   const [chain, setChain] = useState<Chain>("Ethereum");
-  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { setActiveWallet } = useCaseContext();
 
+  const chainId = CHAIN_META[chain].chainId;
+  const chainSupported = BACKEND_SUPPORTED.has(chainId);
+
   const handleTrace = () => {
-    if (!address.trim()) return;
-    setLoading(true);
-    // Map Chain name to blockchain symbol
-    const chainSymbol = CHAIN_META[chain].symbol as
-      "BTC" | "ETH" | "TRON" | "BSC" | "Polygon";
-    // Set context from trace input
-    setActiveWallet(address, chainSymbol);
-    setTimeout(() => navigate({ to: "/dashboard/investigation" }), 1200);
+    if (!address.trim() || !chainSupported) return;
+    // Set context from trace input, then navigate straight to the results
+    // page — it fetches the real trace itself, no fake loading delay here.
+    setActiveWallet(address, chainId);
+    navigate({ to: "/dashboard/investigation" });
   };
 
   return (
@@ -195,11 +216,25 @@ function TraceWallet() {
             </div>
           </div>
 
+          {!chainSupported && (
+            <p
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: "0.68rem",
+                color: "var(--color-destructive, oklch(0.65 0.2 25))",
+                marginTop: "0.6rem",
+              }}
+            >
+              {CHAIN_META[chain].symbol} tracing isn't supported by the
+              backend yet — only BTC, ETH, and TRON are live.
+            </p>
+          )}
+
           {/* CTA */}
           <button
             className="ug-btn-primary"
             onClick={handleTrace}
-            disabled={!address.trim() || loading}
+            disabled={!address.trim() || !chainSupported}
             style={{
               width: "100%",
               justifyContent: "center",
@@ -207,26 +242,7 @@ function TraceWallet() {
               padding: "0.85rem",
             }}
           >
-            {loading ? (
-              <span
-                style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}
-              >
-                <span
-                  style={{
-                    width: "0.85rem",
-                    height: "0.85rem",
-                    border: "2px solid oklch(0.18 0.03 60 / 40%)",
-                    borderTopColor: "oklch(0.18 0.03 60)",
-                    borderRadius: "3px",
-                    animation: "spin 0.65s linear infinite",
-                    display: "inline-block",
-                  }}
-                />
-                Initiating trace�
-              </span>
-            ) : (
-              "START TRACE ?"
-            )}
+            START TRACE &rarr;
           </button>
         </div>
       </div>
@@ -280,7 +296,9 @@ function TraceWallet() {
                   letterSpacing: "0.04em",
                 }}
               >
-                {ex.addr}
+                {ex.addr.length > 14
+                  ? `${ex.addr.slice(0, 6)}...${ex.addr.slice(-4)}`
+                  : ex.addr}
               </span>
               <span
                 style={{

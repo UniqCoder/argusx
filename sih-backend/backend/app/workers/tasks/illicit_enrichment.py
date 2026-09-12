@@ -7,7 +7,6 @@ linked to enforcement-staged cases). This is what makes the live graph topology
 features non-degenerate: without illicit flags, ratio/shortest-path features in
 app/ml/live_graph_features.py always evaluate against an empty illicit set.
 """
-import asyncio
 import structlog
 from typing import List
 
@@ -21,6 +20,7 @@ from app.graph.neo4j_client import run_query
 from app.models.case import Case, CaseWallet
 from app.models.wallet import Wallet
 from app.workers.celery_app import celery_app
+from app.workers.tasks._async_utils import run_async
 from sqlalchemy import select
 
 logger = structlog.get_logger(__name__)
@@ -94,16 +94,4 @@ async def _enrich_async() -> dict:
 @celery_app.task(name="app.workers.tasks.illicit_enrichment.enrich_illicit_flags_task")
 def enrich_illicit_flags_task() -> dict:
     """Celery task: idempotently flag known-illicit wallets in the live graph."""
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.ensure_future(_enrich_async())
-            return {"status": "queued"}
-        return loop.run_until_complete(_enrich_async())
-    except Exception:
-        new_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(new_loop)
-        try:
-            return new_loop.run_until_complete(_enrich_async())
-        finally:
-            new_loop.close()
+    return run_async(_enrich_async)

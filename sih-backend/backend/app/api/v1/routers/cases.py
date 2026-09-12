@@ -17,7 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import CurrentUserDep, InvestigatorOrAdminDep
 from app.db.session import get_db
-from app.schemas.case import CaseCreate, CasePatch, CaseRead
+from app.engine import ledger as ledger_engine
+from app.schemas.case import CaseCreate, CasePatch, CaseRead, EvidenceEvent
 from app.schemas.common import CaseStatus, ErrorEnvelope, PaginatedResponse
 from app.services import audit_service, case_service, report_service
 
@@ -168,6 +169,67 @@ async def update_case(
         **updated_case.__dict__,
         "wallets": await case_service.get_case_wallets(db, updated_case.id),
     })
+
+
+@router.get(
+    "/{id}/evidence",
+    response_model=list[EvidenceEvent],
+    status_code=status.HTTP_200_OK,
+    responses={
+        401: {"model": ErrorEnvelope, "description": "Unauthorized"},
+        403: {"model": ErrorEnvelope, "description": "Forbidden"},
+        404: {"model": ErrorEnvelope, "description": "Case not found"},
+    },
+    summary="Chronological evidence trail for a case — real audit + forensic-ledger events",
+)
+async def get_case_evidence(
+    id: Annotated[UUID, Path(description="Case UUID")],
+    current_user: CurrentUserDep,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[EvidenceEvent]:
+    """
+    Merges two already-real, already-populated sources instead of inventing
+    a new one: the immutable audit log (view/update/export actions on this
+    case) and the forensic-engine's tamper-evident ledger (anchor
+    registration, trace completion, decisions) scoped to this case_id.
+    """
+    case = await case_service.get_case_by_id(db, id)
+    if case is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": {
+                    "code": "CASE_NOT_FOUND",
+                    "message": f"Case with ID '{id}' was not found.",
+                    "details": {"case_id": str(id)},
+                }
+            },
+        )
+
+    audit_rows = await audit_service.get_audit_logs_for_entity(db, "case", id)
+    ledger_rows = await ledger_engine.get_entries_for_case(db, id)
+
+    events = [
+        EvidenceEvent(
+            source="audit",
+            event_type=row.action or "unknown",
+            actor=row.actor,
+            occurred_at=row.timestamp,
+            details={"entity": row.entity, "entity_id": str(row.entity_id) if row.entity_id else None},
+        )
+        for row in audit_rows
+    ] + [
+        EvidenceEvent(
+            source="ledger",
+            event_type=row.event_type,
+            actor=row.actor,
+            occurred_at=row.occurred_at,
+            details=row.payload,
+        )
+        for row in ledger_rows
+    ]
+    events.sort(key=lambda e: e.occurred_at)
+    return events
 
 
 @router.get(

@@ -3,7 +3,6 @@ import { useState } from "react";
 import type { IntelEvent } from "@/lib/mock-data";
 import { useAlerts } from "@/hooks/use-alerts";
 import { useCaseContext } from "@/store/case-context-store";
-import { MOCK_CASES } from "@/lib/mock-data";
 
 export const Route = createFileRoute("/dashboard/alerts")({
   component: LiveAlerts,
@@ -29,7 +28,7 @@ function LiveAlerts() {
   const { events, setEvents } = useAlerts();
   const [filter, setFilter] = useState<string>("All");
   const navigate = useNavigate();
-  const { setActiveCase } = useCaseContext();
+  const { setActiveCaseMeta } = useCaseContext();
 
   const acknowledge = (id: string) =>
     setEvents((prev) =>
@@ -37,20 +36,12 @@ function LiveAlerts() {
     );
 
   const handleOpenAlert = (evt: IntelEvent) => {
-    // Find the case in mock data to get full details
-    const caseData = MOCK_CASES.find((c) => c.id === evt.caseId);
-    if (caseData) {
-      setActiveCase({
-        caseId: caseData.id,
-        caseNumber: caseData.id,
-        wallet: caseData.reportedWallet,
-        chain: caseData.blockchain as
-          "BTC" | "ETH" | "TRON" | "BSC" | "Polygon",
-        fraudType: caseData.fraudType,
-        status: caseData.traceStatus,
-      });
+    // The alerts list only carries a case id, not a wallet address — set
+    // what's real (case identity) and let the investigation page show its
+    // honest "no wallet selected" state rather than inventing a wallet.
+    if (evt.caseId) {
+      setActiveCaseMeta({ caseId: evt.caseId, caseNumber: evt.caseId });
     }
-    // Navigate to investigation
     navigate({ to: "/dashboard/investigation" });
   };
 

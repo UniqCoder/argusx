@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { MOCK_CASES } from "@/lib/mock-data";
 import { useWalletRisk } from "@/hooks/use-wallet";
 import { useCaseContext } from "@/store/case-context-store";
 import { WalletSelector } from "@/components/dashboard/WalletSelector";
+import { BackendOfflineBanner } from "@/components/shared/BackendOfflineBanner";
 import type { Chain } from "@/lib/api-types";
 
 export const Route = createFileRoute("/dashboard/risk")({
@@ -81,30 +81,21 @@ function ScoreDial({ score, color }: { score: number; color: string }) {
 
 function RiskIntelligence() {
   const [expanded, setExpanded] = useState<string | null>(null);
-  const { activeWallet, activeChain, activeCaseId, hasActiveCase } =
-    useCaseContext();
+  const { activeWallet, activeChain } = useCaseContext();
 
-  // Fallback to first case if no case selected
-  const caseData = hasActiveCase()
-    ? MOCK_CASES.find((c) => c.id === activeCaseId) || MOCK_CASES[0]!
-    : MOCK_CASES[0]!;
-
-  const walletToAnalyze =
-    activeWallet || caseData.reportedWallet.replace("...", "demo");
+  // No fabricated demo wallet fallback — this page needs a real active
+  // wallet (set by trace.tsx or cross-victim.tsx) to have anything to show.
+  const walletToAnalyze = activeWallet;
   const chainToAnalyze = (activeChain || "ETH") as
     "BTC" | "ETH" | "TRON" | "BSC" | "Polygon";
 
-  const { riskScore: liveScore, signals: liveSignals } = useWalletRisk(
-    walletToAnalyze,
-    chainToAnalyze as Chain,
-  );
-  const totalScore = liveScore;
-  const scoreColor =
-    totalScore > 80
-      ? "var(--color-signal)"
-      : totalScore > 55
-        ? "var(--color-primary)"
-        : "var(--color-accent)";
+  const {
+    riskScore: liveScore,
+    riskTier,
+    signals: liveSignals,
+    loading,
+    error,
+  } = useWalletRisk(walletToAnalyze, chainToAnalyze as Chain);
 
   return (
     <>
@@ -115,24 +106,96 @@ function RiskIntelligence() {
           <p className="ug-page-header__sub">
             {activeWallet
               ? `Analyzing: ${activeWallet.slice(0, 12)}...`
-              : "Explainable risk analysis — every signal is backed by verifiable data."}
+              : "Explainable risk analysis — every signal is backed by verifiable data. Trace or search a wallet first."}
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <WalletSelector />
-          <span
-            className="ug-badge ug-badge--critical"
-            style={{ fontSize: "0.62rem", padding: "0.3rem 0.7rem" }}
-          >
-            {totalScore > 80
-              ? "CRITICAL RISK"
-              : totalScore > 55
-                ? "HIGH RISK"
-                : "MEDIUM RISK"}
-          </span>
+          {liveScore !== null && (
+            <span
+              className="ug-badge ug-badge--critical"
+              style={{ fontSize: "0.62rem", padding: "0.3rem 0.7rem" }}
+            >
+              {(riskTier ?? "").toUpperCase() || "SCORED"}
+            </span>
+          )}
         </div>
       </div>
 
+      {!activeWallet && (
+        <div className="ug-surface" style={{ padding: "1rem 1.25rem" }}>
+          <p
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.62rem",
+              color: "var(--color-muted-foreground)",
+            }}
+          >
+            No wallet selected yet — trace a wallet or pick one from the
+            selector above.
+          </p>
+        </div>
+      )}
+
+      {activeWallet && liveScore === null && (
+        <div className="ug-surface" style={{ padding: "1rem 1.25rem" }}>
+          {loading && !error && (
+            <p
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: "0.62rem",
+                color: "var(--color-muted-foreground)",
+              }}
+            >
+              Scoring…
+            </p>
+          )}
+          <BackendOfflineBanner error={error} context="risk score" />
+        </div>
+      )}
+
+      {activeWallet && liveScore !== null && (
+        <RiskPanel
+          totalScore={liveScore}
+          riskTier={riskTier}
+          liveSignals={liveSignals}
+          walletToAnalyze={walletToAnalyze}
+          chainToAnalyze={chainToAnalyze}
+          expanded={expanded}
+          setExpanded={setExpanded}
+        />
+      )}
+    </>
+  );
+}
+
+// Split out so `totalScore` is a plain non-null number prop here — the
+// parent only renders this once useWalletRisk has actually returned a score.
+function RiskPanel({
+  totalScore,
+  riskTier,
+  liveSignals,
+  walletToAnalyze,
+  chainToAnalyze,
+  expanded,
+  setExpanded,
+}: {
+  totalScore: number;
+  riskTier: string | null;
+  liveSignals: ReturnType<typeof useWalletRisk>["signals"];
+  walletToAnalyze: string | null;
+  chainToAnalyze: string;
+  expanded: string | null;
+  setExpanded: (id: string | null) => void;
+}) {
+  const scoreColor =
+    totalScore > 80
+      ? "var(--color-signal)"
+      : totalScore > 55
+        ? "var(--color-primary)"
+        : "var(--color-accent)";
+
+  return (
       <div
         style={{
           display: "grid",
@@ -154,7 +217,7 @@ function RiskIntelligence() {
                 color: "var(--color-muted-foreground)",
               }}
             >
-              {caseData.id}
+              {chainToAnalyze}
             </span>
           </div>
 
@@ -199,10 +262,9 @@ function RiskIntelligence() {
 
           <div style={{ padding: "0 1.25rem 1.25rem" }}>
             {[
-              { k: "Wallet", v: caseData.reportedWallet },
-              { k: "Chain", v: caseData.blockchain },
-              { k: "Fraud Type", v: caseData.fraudType },
-              { k: "Victims", v: String(caseData.victimCount) },
+              { k: "Wallet", v: walletToAnalyze ?? "—" },
+              { k: "Chain", v: chainToAnalyze },
+              { k: "Risk Tier", v: riskTier ?? "—" },
             ].map(({ k, v }) => (
               <div key={k} className="ug-data-row">
                 <span className="ug-data-row__key">{k}</span>
@@ -506,6 +568,5 @@ function RiskIntelligence() {
           </div>
         </div>
       </div>
-    </>
   );
 }

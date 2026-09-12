@@ -1,9 +1,11 @@
 import { useCaseContext } from "@/store/case-context-store";
-import { MOCK_CASES } from "@/lib/mock-data";
+import { useCases } from "@/hooks/use-cases";
 import { useState } from "react";
 
 export function CaseSelector() {
-  const { activeCaseId, setActiveCase } = useCaseContext();
+  const { activeCaseId, activeCaseNumber, setActiveCaseMeta } =
+    useCaseContext();
+  const { allCases, loading } = useCases();
   const [isOpen, setIsOpen] = useState(false);
 
   return (
@@ -25,7 +27,7 @@ export function CaseSelector() {
           whiteSpace: "nowrap",
         }}
       >
-        <span>{activeCaseId ? activeCaseId : "Select case"}</span>
+        <span>{activeCaseId ? activeCaseNumber : "Select case"}</span>
         <span style={{ fontSize: "0.5rem" }}>▼</span>
       </button>
 
@@ -46,17 +48,38 @@ export function CaseSelector() {
             boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
           }}
         >
-          {MOCK_CASES.map((caseItem) => (
+          {loading && (
+            <p
+              style={{
+                padding: "0.65rem 0.75rem",
+                fontFamily: "var(--font-mono)",
+                fontSize: "0.6rem",
+                color: "var(--color-muted-foreground)",
+              }}
+            >
+              Loading cases…
+            </p>
+          )}
+          {!loading && allCases.length === 0 && (
+            <p
+              style={{
+                padding: "0.65rem 0.75rem",
+                fontFamily: "var(--font-mono)",
+                fontSize: "0.6rem",
+                color: "var(--color-muted-foreground)",
+                maxWidth: 220,
+              }}
+            >
+              No cases yet.
+            </p>
+          )}
+          {allCases.map((caseItem) => (
             <button
               key={caseItem.id}
               onClick={() => {
-                setActiveCase({
-                  caseId: caseItem.id,
+                setActiveCaseMeta({
+                  caseId: caseItem.rawId,
                   caseNumber: caseItem.id,
-                  wallet: caseItem.reportedWallet,
-                  chain: caseItem.blockchain as
-                    "BTC" | "ETH" | "TRON" | "BSC" | "Polygon",
-                  fraudType: caseItem.fraudType,
                   status: caseItem.traceStatus,
                 });
                 setIsOpen(false);
@@ -106,7 +129,7 @@ export function CaseSelector() {
               >
                 <span>{caseItem.id}</span>
                 <span style={{ fontSize: "0.55rem", opacity: 0.6 }}>
-                  {caseItem.fraudType}
+                  {caseItem.traceStatus}
                 </span>
               </div>
             </button>

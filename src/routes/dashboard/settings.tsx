@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useNavigate } from "@tanstack/react-router";
+import { useHealth } from "@/hooks/use-health";
 
 export const Route = createFileRoute("/dashboard/settings")({
   component: Settings,
@@ -10,6 +11,33 @@ export const Route = createFileRoute("/dashboard/settings")({
 function Settings() {
   const [signingOut, setSigningOut] = useState(false);
   const navigate = useNavigate();
+  const { health, error: healthError } = useHealth();
+
+  const services: { label: string; ok: boolean; status: string }[] = health
+    ? [
+        {
+          label: "Postgres",
+          ok: health.services?.postgres === "ok",
+          status: health.services?.postgres ?? "unknown",
+        },
+        {
+          label: "Neo4j",
+          ok: health.services?.neo4j === "ok",
+          status: health.services?.neo4j ?? "unknown",
+        },
+        {
+          label: "Redis",
+          ok: health.services?.redis === "ok",
+          status: health.services?.redis ?? "unknown",
+        },
+      ]
+    : [
+        {
+          label: "Backend",
+          ok: false,
+          status: healthError ?? "unreachable",
+        },
+      ];
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -109,17 +137,7 @@ function Settings() {
               marginBottom: "1.25rem",
             }}
           >
-            {[
-              { label: "Intelligence Engine", status: "Operational", ok: true },
-              { label: "Trace Service", status: "Operational", ok: true },
-              {
-                label: "Complaint Correlation",
-                status: "Operational",
-                ok: true,
-              },
-              { label: "VASP Attribution", status: "Operational", ok: true },
-              { label: "Deposit Watch API", status: "Operational", ok: true },
-            ].map(({ label, status, ok }) => (
+            {services.map(({ label, status, ok }) => (
               <div
                 key={label}
                 style={{
