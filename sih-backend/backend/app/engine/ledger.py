@@ -95,6 +95,19 @@ async def append_entry(
         return entry
 
 
+async def get_entries_for_case(db: AsyncSession, case_id: UUID) -> list[EvidenceLedgerEntry]:
+    """Real forensic-engine events for a case's Evidence Trail — anchor
+    registration, trace completion, decisions — in chronological order.
+    Read-only; does not verify the hash chain (see verify_chain for that)."""
+    stmt = (
+        select(EvidenceLedgerEntry)
+        .where(EvidenceLedgerEntry.case_id == case_id)
+        .order_by(EvidenceLedgerEntry.seq.asc())
+    )
+    res = await db.execute(stmt)
+    return list(res.scalars().all())
+
+
 async def _last_entry(db: AsyncSession, case_id: Optional[UUID]) -> EvidenceLedgerEntry | None:
     stmt = select(EvidenceLedgerEntry)
     if case_id is not None:

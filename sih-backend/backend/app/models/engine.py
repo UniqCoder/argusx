@@ -43,6 +43,13 @@ class Anchor(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
         server_default=func.gen_random_uuid(),
     )
+    # Which investigation this anchor/trace belongs to, when traced from a
+    # case context — nullable because a wallet can be traced ad hoc with no
+    # case selected. Lets a case's Evidence Trail show the real anchor/
+    # trace/decision events for that specific investigation.
+    case_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cases.id"), nullable=True,
+    )
     address: Mapped[str] = mapped_column(String, nullable=False)
     chain: Mapped[str] = mapped_column(String, nullable=False)
     attestation_class: Mapped[str] = mapped_column(String(1), nullable=False)  # A | B | C

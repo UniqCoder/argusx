@@ -63,10 +63,13 @@ class AnchorCreate(BaseModel):
     asserted_at: Optional[datetime] = None
     victim_amount_inr: Optional[Decimal] = Field(default=None, ge=0)
     evidence_uri: Optional[str] = None
+    # Which investigation this belongs to, when traced from a case context.
+    case_id: Optional[UUID] = None
 
 
 class AnchorRead(BaseModel):
     id: UUID
+    case_id: Optional[UUID] = None
     address: str
     chain: Chain
     attestation_class: AttestationClass

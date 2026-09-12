@@ -92,6 +92,7 @@ async def create_anchor(
             "source_ref": anchor.source_ref,
         },
         actor=current_user.sub,
+        case_id=anchor.case_id,
     )
     logger.info("anchor_registered", extra={"anchor_id": str(anchor.id), "source_ref": anchor.source_ref})
     return AnchorRead.model_validate(anchor)
@@ -199,6 +200,7 @@ async def run_trace(
         terminal=best_terminal,
     )
     decision = Decision(
+        case_id=anchor.case_id,
         address=anchor.address,
         chain=anchor.chain,
         action=decision_result.action.value,
@@ -221,6 +223,7 @@ async def run_trace(
             "node_count": len(result.nodes), "reproducible_hash": result.reproducible_hash,
         },
         actor=current_user.sub,
+        case_id=anchor.case_id,
     )
     await ledger_engine.append_entry(
         db,
@@ -230,6 +233,7 @@ async def run_trace(
             "reasoning": decision.reasoning,
         },
         actor=current_user.sub,
+        case_id=anchor.case_id,
     )
 
     logger.info(

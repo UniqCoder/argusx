@@ -32,6 +32,7 @@ async def create_anchor(db: AsyncSession, body: AnchorCreate) -> Anchor:
     ck_anchor_never_system_generated backs this even against a direct DB write.
     """
     anchor = Anchor(
+        case_id=body.case_id,
         address=body.address.strip(),
         chain=body.chain.value,
         attestation_class=body.attestation_class.value,

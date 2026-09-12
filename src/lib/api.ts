@@ -14,6 +14,7 @@ import type {
   AnchorRead,
   EngineTraceRequest,
   EngineTraceResult,
+  EvidenceEvent,
   CorrelateRequest,
   CorrelateResponse,
   Paginated,
@@ -243,6 +244,10 @@ export function patchCase(id: string, body: CasePatch): Promise<Case> {
 
 export function getCaseReport(id: string): Promise<Blob> {
   return request<Blob>(`/api/v1/cases/${id}/report`);
+}
+
+export function getCaseEvidence(id: string): Promise<EvidenceEvent[]> {
+  return request<EvidenceEvent[]>(`/api/v1/cases/${id}/evidence`);
 }
 
 // ── Alerts ─────────────────────────────────────────────────────────────────

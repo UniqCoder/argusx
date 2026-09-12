@@ -1,6 +1,6 @@
 """app/schemas/case.py — Case schemas."""
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -40,3 +40,21 @@ class CaseRead(BaseModel):
 class CasePatch(BaseModel):
     status: Optional[CaseStatus] = None
     assigned_investigator: Optional[str] = None
+
+
+class EvidenceEvent(BaseModel):
+    """One real, already-recorded event for a case's Evidence Trail.
+
+    Two real sources, merged and sorted by when they actually happened:
+    the immutable audit log (view/update/export actions — app/models/audit.py)
+    and the tamper-evident forensic-engine ledger (anchor/trace/decision
+    events — app/models/engine.py's EvidenceLedgerEntry). Nothing here is
+    synthesized for this endpoint; both tables already existed and were
+    already being written to.
+    """
+
+    source: Literal["audit", "ledger"]
+    event_type: str
+    actor: Optional[str] = None
+    occurred_at: datetime
+    details: dict[str, Any] = Field(default_factory=dict)

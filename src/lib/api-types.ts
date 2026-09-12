@@ -144,10 +144,12 @@ export interface AnchorCreate {
   asserted_by: string;
   victim_amount_inr?: number | null;
   evidence_uri?: string | null;
+  case_id?: string | null;
 }
 
 export interface AnchorRead {
   id: string;
+  case_id?: string | null;
   address: string;
   chain: Chain;
   attestation_class: AttestationClass;
@@ -238,6 +240,15 @@ export interface CaseCreate {
 export interface CasePatch {
   status?: CaseStatus;
   assigned_investigator?: string | null;
+}
+
+// ── Evidence Trail — real audit-log + forensic-ledger events for a case ────
+export interface EvidenceEvent {
+  source: "audit" | "ledger";
+  event_type: string;
+  actor?: string | null;
+  occurred_at: string;
+  details: Record<string, unknown>;
 }
 
 // ── Health ─────────────────────────────────────────────────────────────────
