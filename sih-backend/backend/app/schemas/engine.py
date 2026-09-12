@@ -109,6 +109,12 @@ class TaintNodeRead(BaseModel):
     parent_address: Optional[str] = None
     tx_hash: Optional[str] = None
     tx_amount: Optional[Decimal] = None
+    # Real on-chain timestamp of the transaction that reached this node
+    # (None for the anchor). Already computed and persisted — see
+    # app/engine/taint.py's TaintedNode — just not returned until now. Lets
+    # the frontend do an honest chronological replay instead of an
+    # arbitrary progress bar.
+    first_tainted_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 

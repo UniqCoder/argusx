@@ -68,7 +68,9 @@ function TraceGraph({
         </marker>
       </defs>
 
-      {/* Edges */}
+      {/* Edges — unresolved (not yet reached in the real chronological
+          replay order) render dashed/faint; becoming resolved fades the
+          edge in for real, tied to the real reveal step, not a fake loop. */}
       {edges.map((edge) => {
         const a = getNode(edge.from);
         const b = getNode(edge.to);
@@ -91,7 +93,11 @@ function TraceGraph({
             strokeWidth={isSelected ? 2 : 1.5}
             strokeDasharray={edge.resolved ? "none" : "5 4"}
             markerEnd={edge.resolved ? "url(#arrow)" : undefined}
-            style={{ cursor: "pointer" }}
+            style={{
+              cursor: "pointer",
+              opacity: edge.resolved ? 1 : 0.5,
+              transition: "opacity 0.5s ease, stroke 0.3s ease",
+            }}
             onClick={() => onSelectEdge(edge.id)}
           />
         );
@@ -109,7 +115,9 @@ function TraceGraph({
             style={{
               cursor: "pointer",
               opacity: isUnresolved ? 0.35 : 1,
-              transform: `translate(${node.x}px, ${node.y}px)`,
+              transform: `translate(${node.x}px, ${node.y}px) scale(${isUnresolved ? 0.7 : 1})`,
+              transformOrigin: `${node.x}px ${node.y}px`,
+              transition: "opacity 0.4s ease, transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)",
             }}
             onClick={() => onSelectNode(node.id)}
           >
@@ -541,20 +549,31 @@ function InvestigationWorkspace() {
     return () => clearInterval(interval);
   }, [playing, speed]);
 
-  // How many nodes are "revealed" based on progress
-  const revealedCount = Math.max(1, Math.ceil(progress * nodes.length));
-  const visibleNodes = nodes.slice(0, revealedCount).map((n, i) => ({
-    ...n,
-    resolved: n.resolved && i < revealedCount,
-  }));
-  const visibleEdges = edges.map((e) => {
-    const fromIdx = nodes.findIndex((n) => n.id === e.from);
-    const toIdx = nodes.findIndex((n) => n.id === e.to);
-    return {
-      ...e,
-      resolved: e.resolved && fromIdx < revealedCount && toIdx < revealedCount,
-    };
+  // Reveal order follows the real on-chain time each node was reached
+  // (firstTaintedAt) — the root/searched wallet has none and always goes
+  // first. This makes Play/Replay an honest chronological reconstruction
+  // of when the money actually moved, not an arbitrary array-order reveal.
+  const revealOrder = [...nodes].sort((a, b) => {
+    if (!a.firstTaintedAt && !b.firstTaintedAt) return 0;
+    if (!a.firstTaintedAt) return -1;
+    if (!b.firstTaintedAt) return 1;
+    return (
+      new Date(a.firstTaintedAt).getTime() -
+      new Date(b.firstTaintedAt).getTime()
+    );
   });
+  const revealedCount = Math.max(1, Math.ceil(progress * nodes.length));
+  const revealedIds = new Set(
+    revealOrder.slice(0, revealedCount).map((n) => n.id),
+  );
+  const visibleNodes = nodes.map((n) => ({
+    ...n,
+    resolved: n.resolved && revealedIds.has(n.id),
+  }));
+  const visibleEdges = edges.map((e) => ({
+    ...e,
+    resolved: e.resolved && revealedIds.has(e.from) && revealedIds.has(e.to),
+  }));
 
   if (!activeWallet) {
     return (

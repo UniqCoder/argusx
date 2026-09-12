@@ -69,6 +69,8 @@ function traceResultToGraph(
       resolved: true,
     };
     if (n.tx_amount != null) node.amount = `${n.tx_amount} ${n.chain}`;
+    if (n.first_tainted_at) node.firstTaintedAt = n.first_tainted_at;
+    if (n.terminal_kind) node.terminalKind = n.terminal_kind;
     return node;
   });
 
@@ -83,7 +85,7 @@ function traceResultToGraph(
         to: toId ?? "n0",
         method: "Direct Transfer",
         amount: n.tx_amount != null ? `${n.tx_amount} ${n.chain}` : "—",
-        timestamp: "",
+        timestamp: n.first_tainted_at ?? "",
         txHash: n.tx_hash!,
         dataSource:
           n.chain === "BTC"

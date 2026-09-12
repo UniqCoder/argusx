@@ -183,6 +183,7 @@ export interface TaintNodeRead {
   parent_address?: string | null;
   tx_hash?: string | null;
   tx_amount?: number | null;
+  first_tainted_at?: string | null;
 }
 
 export interface EngineTraceResult {

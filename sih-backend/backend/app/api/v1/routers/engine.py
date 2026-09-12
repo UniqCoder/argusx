@@ -371,6 +371,7 @@ def _taint_node_from_row(row: TaintNode) -> TaintNodeRead:
         parent_address=row.parent_address,
         tx_hash=row.tx_hash,
         tx_amount=row.tx_amount,
+        first_tainted_at=row.first_tainted_at,
     )
 
 
@@ -389,6 +390,7 @@ def _build_trace_result(anchor, trace, engine_nodes, engine_terminals, unattribu
             still_active=n.still_active,
             parent_address=n.parent_address, tx_hash=n.tx_hash,
             tx_amount=(Decimal(str(round(n.tx_amount, 8))) if n.tx_amount is not None else None),
+            first_tainted_at=n.first_tainted_at,
         )
         for n in engine_nodes
     ]

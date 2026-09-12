@@ -76,6 +76,13 @@ export interface TraceNode {
   riskScore?: number;
   resolved: boolean;
   amount?: string;
+  // Real on-chain timestamp of the transaction that reached this node
+  // (absent for the root/searched wallet). Drives chronological replay
+  // ordering — not decoration.
+  firstTaintedAt?: string;
+  // Real terminal classification from the backend (VASP/MIXER_BOUNDARY/
+  // BRIDGE/DUST/DEPTH_LIMIT/NODE_LIMIT/NO_OUTFLOW), when this node is one.
+  terminalKind?: string;
   x: number;
   y: number;
 }
