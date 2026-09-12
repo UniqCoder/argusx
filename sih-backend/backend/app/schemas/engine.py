@@ -103,6 +103,12 @@ class TaintNodeRead(BaseModel):
     entity_jurisdiction: Optional[str] = None
     proof_path: list[str]
     still_active: bool
+    # The specific incoming edge that reached this node — None only for the
+    # anchor itself (hop 0). Lets the frontend render the real branching
+    # graph (parent -> child edges) instead of a flat hop list.
+    parent_address: Optional[str] = None
+    tx_hash: Optional[str] = None
+    tx_amount: Optional[Decimal] = None
 
     model_config = {"from_attributes": True}
 

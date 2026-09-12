@@ -115,6 +115,11 @@ class TaintNode(Base):
     entity_jurisdiction: Mapped[str | None] = mapped_column(String, nullable=True)
     proof_path: Mapped[list] = mapped_column(JSON, nullable=False, default=list)  # ordered tx hashes
     first_tainted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    # The specific incoming edge that reached this node (None for the anchor
+    # itself) — lets callers render the real branching graph, not a flat list.
+    parent_address: Mapped[str | None] = mapped_column(String, nullable=True)
+    tx_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    tx_amount: Mapped[float | None] = mapped_column(Numeric(24, 8), nullable=True)
 
 
 class EvidenceLedgerEntry(Base):

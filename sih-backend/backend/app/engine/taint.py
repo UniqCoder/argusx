@@ -64,6 +64,13 @@ class TaintedNode:
     proof_path: list[str]
     first_tainted_at: Optional[datetime]
     still_active: bool
+    # The specific incoming edge that reached this node — None only for the
+    # anchor (hop 0), which has no parent. Needed to render the real
+    # branching money-flow graph (multiple children per node), not just a
+    # flat hop list.
+    parent_address: Optional[str] = None
+    tx_hash: Optional[str] = None
+    tx_amount: Optional[float] = None
 
 
 @dataclass
@@ -85,6 +92,9 @@ class _FrontierItem:
     taint_value: float = field(compare=False)
     proof_path: list[str] = field(compare=False)
     first_tainted_at: Optional[datetime] = field(compare=False)
+    parent_address: Optional[str] = field(compare=False, default=None)
+    tx_hash: Optional[str] = field(compare=False, default=None)
+    tx_amount: Optional[float] = field(compare=False, default=None)
 
 
 def _explorer_for(chain: str):
@@ -126,6 +136,7 @@ async def propagate_taint(
             sort_key=-anchor_taint_value, seq=next(counter),
             address=anchor_address, chain=anchor_chain, hop=0,
             taint_value=anchor_taint_value, proof_path=[], first_tainted_at=None,
+            parent_address=None, tx_hash=None, tx_amount=None,
         ),
     )
 
@@ -146,6 +157,7 @@ async def propagate_taint(
                 entity_name=None, entity_jurisdiction=None,
                 proof_path=item.proof_path, first_tainted_at=item.first_tainted_at,
                 still_active=True,
+                parent_address=item.parent_address, tx_hash=item.tx_hash, tx_amount=item.tx_amount,
             )
             continue
 
@@ -158,6 +170,7 @@ async def propagate_taint(
                 entity_jurisdiction=jurisdiction, proof_path=item.proof_path,
                 first_tainted_at=item.first_tainted_at,
                 still_active=terminal_kind != TerminalKind.MIXER_BOUNDARY.value,
+                parent_address=item.parent_address, tx_hash=item.tx_hash, tx_amount=item.tx_amount,
             )
             continue
 
@@ -169,6 +182,7 @@ async def propagate_taint(
                 entity_name=None, entity_jurisdiction=None,
                 proof_path=item.proof_path, first_tainted_at=item.first_tainted_at,
                 still_active=True,
+                parent_address=item.parent_address, tx_hash=item.tx_hash, tx_amount=item.tx_amount,
             )
             continue
 
@@ -183,6 +197,7 @@ async def propagate_taint(
                 entity_name=None, entity_jurisdiction=None,
                 proof_path=item.proof_path, first_tainted_at=item.first_tainted_at,
                 still_active=True,
+                parent_address=item.parent_address, tx_hash=item.tx_hash, tx_amount=item.tx_amount,
             )
             continue
 
@@ -198,6 +213,7 @@ async def propagate_taint(
                 entity_name=None, entity_jurisdiction=None,
                 proof_path=item.proof_path, first_tainted_at=wallet_first_tainted_at,
                 still_active=True,
+                parent_address=item.parent_address, tx_hash=item.tx_hash, tx_amount=item.tx_amount,
             )
             continue
 
@@ -213,6 +229,7 @@ async def propagate_taint(
                 entity_name=None, entity_jurisdiction=None,
                 proof_path=item.proof_path, first_tainted_at=wallet_first_tainted_at,
                 still_active=True,
+                parent_address=item.parent_address, tx_hash=item.tx_hash, tx_amount=item.tx_amount,
             )
             continue
 
@@ -222,6 +239,7 @@ async def propagate_taint(
             terminal_kind=None, entity_name=None, entity_jurisdiction=None,
             proof_path=item.proof_path, first_tainted_at=wallet_first_tainted_at,
             still_active=False,
+            parent_address=item.parent_address, tx_hash=item.tx_hash, tx_amount=item.tx_amount,
         )
 
         for tx in outgoing:
@@ -239,6 +257,7 @@ async def propagate_taint(
                     taint_value=child_value,
                     proof_path=[*item.proof_path, tx.tx_hash],
                     first_tainted_at=tx.timestamp,
+                    parent_address=item.address, tx_hash=tx.tx_hash, tx_amount=tx.amount,
                 ),
             )
 
@@ -256,6 +275,7 @@ async def propagate_taint(
                 entity_name=None, entity_jurisdiction=None,
                 proof_path=item.proof_path, first_tainted_at=item.first_tainted_at,
                 still_active=True,
+                parent_address=item.parent_address, tx_hash=item.tx_hash, tx_amount=item.tx_amount,
             )
 
     all_nodes = list(visited.values())

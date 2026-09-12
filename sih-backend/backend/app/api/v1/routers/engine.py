@@ -177,6 +177,9 @@ async def run_trace(
                 entity_jurisdiction=node.entity_jurisdiction,
                 proof_path=node.proof_path,
                 first_tainted_at=node.first_tainted_at,
+                parent_address=node.parent_address,
+                tx_hash=node.tx_hash,
+                tx_amount=node.tx_amount,
             )
         )
 
@@ -365,6 +368,9 @@ def _taint_node_from_row(row: TaintNode) -> TaintNodeRead:
         entity_jurisdiction=row.entity_jurisdiction,
         proof_path=row.proof_path or [],
         still_active=row.terminal_kind not in ("MIXER_BOUNDARY",),
+        parent_address=row.parent_address,
+        tx_hash=row.tx_hash,
+        tx_amount=row.tx_amount,
     )
 
 
@@ -381,6 +387,8 @@ def _build_trace_result(anchor, trace, engine_nodes, engine_terminals, unattribu
             terminal_kind=n.terminal_kind, entity_name=n.entity_name,
             entity_jurisdiction=n.entity_jurisdiction, proof_path=n.proof_path,
             still_active=n.still_active,
+            parent_address=n.parent_address, tx_hash=n.tx_hash,
+            tx_amount=(Decimal(str(round(n.tx_amount, 8))) if n.tx_amount is not None else None),
         )
         for n in engine_nodes
     ]
