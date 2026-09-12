@@ -12,8 +12,10 @@ investigation record. It is NOT a Section 65B(4) certificate — that requires
 a signed statement from the person responsible for the computer system. This
 module produces the artifact; a human signs it.
 """
+import asyncio
 import hashlib
 import json
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import UUID
@@ -25,6 +27,18 @@ from app.models.engine import EvidenceLedgerEntry
 from app.schemas.engine import LedgerVerifyResponse
 
 GENESIS_HASH = "0" * 64
+
+# append_entry does a read-then-write (fetch last entry -> compute hash off
+# its entry_hash -> insert). Two concurrent appends to the SAME chain (same
+# case_id, or both to the global None chain) can both read the same "last
+# entry" before either commits, so the second commit's prev_hash no longer
+# matches the chain's real tip — verify_chain then reports the chain broken,
+# even though nothing was tampered with. One asyncio.Lock per chain key
+# serializes the whole read+compute+insert critical section within this
+# process (uvicorn runs this app single-process/single-event-loop, so this
+# is sufficient here — it would need a DB-level lock, e.g. a Postgres
+# advisory lock, to also hold across multiple server processes).
+_chain_locks: dict[Optional[str], asyncio.Lock] = defaultdict(asyncio.Lock)
 
 
 def _canonical_json(payload: dict[str, Any]) -> str:
@@ -59,24 +73,26 @@ async def append_entry(
     case_id: Optional[UUID] = None,
 ) -> EvidenceLedgerEntry:
     """Append one event to the hash chain. Never mutates or deletes a prior row."""
-    last = await _last_entry(db, case_id)
-    prev_hash = last.entry_hash if last else GENESIS_HASH
-    occurred_at = datetime.now(timezone.utc)
-    entry_hash = _compute_entry_hash(prev_hash, payload, occurred_at)
+    lock_key = str(case_id) if case_id is not None else None
+    async with _chain_locks[lock_key]:
+        last = await _last_entry(db, case_id)
+        prev_hash = last.entry_hash if last else GENESIS_HASH
+        occurred_at = datetime.now(timezone.utc)
+        entry_hash = _compute_entry_hash(prev_hash, payload, occurred_at)
 
-    entry = EvidenceLedgerEntry(
-        case_id=case_id,
-        event_type=event_type,
-        payload=payload,
-        actor=actor,
-        occurred_at=occurred_at,
-        prev_hash=prev_hash,
-        entry_hash=entry_hash,
-    )
-    db.add(entry)
-    await db.commit()
-    await db.refresh(entry)
-    return entry
+        entry = EvidenceLedgerEntry(
+            case_id=case_id,
+            event_type=event_type,
+            payload=payload,
+            actor=actor,
+            occurred_at=occurred_at,
+            prev_hash=prev_hash,
+            entry_hash=entry_hash,
+        )
+        db.add(entry)
+        await db.commit()
+        await db.refresh(entry)
+        return entry
 
 
 async def _last_entry(db: AsyncSession, case_id: Optional[UUID]) -> EvidenceLedgerEntry | None:
