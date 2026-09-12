@@ -132,7 +132,8 @@ export type TerminalKind =
   | "BRIDGE"
   | "DUST"
   | "DEPTH_LIMIT"
-  | "NODE_LIMIT";
+  | "NODE_LIMIT"
+  | "NO_OUTFLOW";
 export type DecisionAction = "monitor" | "hold_for_review" | "block";
 
 export interface AnchorCreate {

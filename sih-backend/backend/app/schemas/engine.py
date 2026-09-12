@@ -43,6 +43,13 @@ class TerminalKind(str, Enum):
     DUST = "DUST"
     DEPTH_LIMIT = "DEPTH_LIMIT"
     NODE_LIMIT = "NODE_LIMIT"
+    # This address's own recent transactions include no outgoing transfers —
+    # a real, correct result (a contract, a receive-only wallet, or activity
+    # older than the fetched window), not a failure. Previously taint.py
+    # used the raw string "NO_OUTFLOW" here for non-root nodes without it
+    # being a valid enum member, which would have raised a validation error
+    # the first real trace that hit this branch.
+    NO_OUTFLOW = "NO_OUTFLOW"
 
 
 class DecisionAction(str, Enum):

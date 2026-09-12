@@ -221,11 +221,14 @@ async def propagate_taint(
         if not outgoing:
             # Tainted funds arrived here and have not moved on (in the fetched
             # window) — this is the most operationally important terminal:
-            # money is still sitting at an identified, freezable address.
+            # money is still sitting at an identified, freezable address. Same
+            # real meaning whether this is the anchor itself or a mid-trace
+            # dead end — NO_OUTFLOW, not the generic "budget exhausted"
+            # NODE_LIMIT this used to (mis)reuse for the root case.
             visited[key] = TaintedNode(
                 address=item.address, chain=item.chain, hop=item.hop,
                 taint_fraction=wallet_fraction, taint_value=item.taint_value,
-                terminal_kind=TerminalKind.NODE_LIMIT.value if item.hop == 0 else "NO_OUTFLOW",
+                terminal_kind=TerminalKind.NO_OUTFLOW.value,
                 entity_name=None, entity_jurisdiction=None,
                 proof_path=item.proof_path, first_tainted_at=wallet_first_tainted_at,
                 still_active=True,

@@ -46,6 +46,7 @@ function nodeLabelFor(node: TaintNodeRead): string {
   if (node.terminal_kind === "DUST") return "Dust (below floor)";
   if (node.terminal_kind === "DEPTH_LIMIT") return "Depth limit reached";
   if (node.terminal_kind === "NODE_LIMIT") return "Trace budget reached";
+  if (node.terminal_kind === "NO_OUTFLOW") return "No outgoing transfers";
   return `Hop ${node.hop}`;
 }
 

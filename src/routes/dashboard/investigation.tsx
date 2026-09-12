@@ -768,6 +768,43 @@ function InvestigationWorkspace() {
                   ? "Trace failed — see the error on the left."
                   : "No trace data for this wallet yet."}
             </p>
+          ) : nodes.length === 1 && nodes[0]?.terminalKind === "NO_OUTFLOW" ? (
+            <div
+              style={{
+                maxWidth: 420,
+                margin: "3rem auto 0",
+                textAlign: "center",
+                padding: "1.5rem",
+              }}
+            >
+              <p
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "0.62rem",
+                  letterSpacing: "0.2em",
+                  textTransform: "uppercase",
+                  color: "var(--color-accent)",
+                  marginBottom: "0.75rem",
+                }}
+              >
+                Trace complete — no outgoing activity found
+              </p>
+              <p
+                style={{
+                  fontSize: "0.8rem",
+                  color: "var(--color-muted-foreground)",
+                  lineHeight: 1.7,
+                }}
+              >
+                This wallet's most recent on-chain transactions include no
+                outgoing transfers. It may be a smart contract (which
+                doesn't "send" the way a wallet does), an address that has
+                only ever received funds, or its outgoing activity is older
+                than the ~40 most recent transactions checked. This is the
+                complete, correct result for this address — not a failed
+                trace.
+              </p>
+            </div>
           ) : (
             <TraceGraph
               nodes={visibleNodes}
