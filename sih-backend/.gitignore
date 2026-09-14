@@ -41,6 +41,17 @@ backend/app/ml/artifacts/*.pkl
 backend/app/ml/artifacts/*.joblib
 backend/app/ml/artifacts/*.model
 backend/app/ml/artifacts/*.npz
+# ...EXCEPT the 3 files actually required for live /risk inference. These were
+# previously excluded on the theory they're "regenerable via train.py", but
+# that requires the Elliptic++ / Kaggle training datasets, which are NOT in
+# this repo and never will be (multi-GB external downloads, see docs/ml.md) —
+# so on any fresh clone/deploy (e.g. Railway) there is in fact no way to
+# regenerate them. Without these committed, /risk silently degrades to
+# risk_tier=unknown for every wallet on a fresh deploy, which is a much worse
+# outcome than committing ~20MB of trained-model binary.
+!backend/app/ml/artifacts/risk_model.joblib
+!backend/app/ml/artifacts/wallet_embeddings.npz
+!backend/app/ml/artifacts/relative_features_reference.json
 data/
 data/raw/
 data/processed/
