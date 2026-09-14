@@ -56,6 +56,16 @@ export interface CaseContext {
     status?: string;
   }) => void;
 
+  // Result of looking up "does the wallet just traced already belong to a
+  // case" (see investigation.tsx). Touches ONLY the case fields — never
+  // activeWallet/activeChain, which the trace itself already set — so a
+  // wallet with no case still traces normally, and a stale case from a
+  // PREVIOUSLY traced wallet doesn't linger and misattribute this one's
+  // Evidence Trail. Pass null when the lookup found no case.
+  setCaseForWallet: (
+    params: { caseId: string; caseNumber: string; status?: string } | null,
+  ) => void;
+
   // Records a wallet (with the chain it was searched on) into the "recently
   // searched" history without touching activeWallet/activeChain — for lookups
   // (e.g. Cross-Victim's own search box) that shouldn't silently change what
@@ -116,6 +126,22 @@ export const useCaseContext = create<CaseContext>((set, get) => ({
       activeFraudType: params.fraudType || null,
       activeCaseStatus: params.status || null,
     }),
+
+  setCaseForWallet: (params) =>
+    set(
+      params
+        ? {
+            activeCaseId: params.caseId,
+            activeCaseNumber: params.caseNumber,
+            activeCaseStatus: params.status || null,
+          }
+        : {
+            activeCaseId: null,
+            activeCaseNumber: null,
+            activeCaseStatus: null,
+            activeFraudType: null,
+          },
+    ),
 
   recordRecentWallet: (wallet, chain) =>
     set((state) => ({

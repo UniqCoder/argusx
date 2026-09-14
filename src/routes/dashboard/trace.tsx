@@ -75,7 +75,7 @@ function TraceWallet() {
   const [address, setAddress] = useState("");
   const [chain, setChain] = useState<Chain>("Ethereum");
   const navigate = useNavigate();
-  const { setActiveWallet } = useCaseContext();
+  const { setActiveWallet, setActiveCase } = useCaseContext();
 
   const chainId = CHAIN_META[chain].chainId;
   const chainSupported = BACKEND_SUPPORTED.has(chainId);
@@ -94,7 +94,21 @@ function TraceWallet() {
   // real engine, which is why Cross-Victim, Deposit Watch, the report and the
   // evidence ledger all work on these cases.
   const loadScenario = (scenario: ScenarioRead) => {
-    setActiveWallet(scenario.anchor_address, scenario.anchor_chain);
+    // A seeded scenario is a real case in the database (scenario.case_id) —
+    // set it directly instead of waiting on the by-wallet lookup that
+    // investigation.tsx runs for every trace, so Evidence Trail already
+    // shows the right case on first paint instead of a one-request flash of
+    // "no active investigation".
+    if (scenario.case_id) {
+      setActiveCase({
+        caseId: scenario.case_id,
+        caseNumber: `UG-${scenario.case_id.slice(0, 8).toUpperCase()}`,
+        wallet: scenario.anchor_address,
+        chain: scenario.anchor_chain,
+      });
+    } else {
+      setActiveWallet(scenario.anchor_address, scenario.anchor_chain);
+    }
     navigate({ to: "/dashboard/investigation" });
   };
 

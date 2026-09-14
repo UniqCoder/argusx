@@ -50,7 +50,7 @@ export function ScenarioPicker({
             border: "1px solid oklch(0.79 0.15 74 / 40%)",
           }}
         >
-          SEEDED
+          SYNTHETIC
         </span>
       </div>
 
@@ -63,12 +63,13 @@ export function ScenarioPicker({
             marginBottom: "0.9rem",
           }}
         >
-          Five cases with synthetic addresses and transactions, seeded into the
-          database and traced by the <strong>real engine</strong> — the same
-          taint propagation, terminal classification and evidence ledger a live
-          wallet gets. They exist because a live wallet cannot be relied on to
-          pass through a mixer, a bridge and an exchange on cue, or to carry
-          three separate victim complaints.
+          Five cases with synthetic wallets — constructed addresses and
+          transactions, built into the database and traced by the{" "}
+          <strong>real engine</strong> — the same taint propagation, terminal
+          classification and evidence ledger a live wallet gets. They exist
+          because a live wallet cannot be relied on to pass through a mixer, a
+          bridge and an exchange on cue, or to carry three separate victim
+          complaints.
         </p>
 
         {loading && (
@@ -105,8 +106,8 @@ export function ScenarioPicker({
               lineHeight: 1.7,
             }}
           >
-            These scenarios are defined but have not been seeded into this
-            database, so tracing one would return nothing. Seed them with:
+            These scenarios are defined but have not been loaded into this
+            database, so tracing one would return nothing. Load them with:
             <code
               style={{
                 display: "block",
@@ -314,7 +315,7 @@ export function ScenarioPicker({
                         cursor: ready ? "pointer" : "not-allowed",
                       }}
                     >
-                      {ready ? "TRACE THIS CASE →" : "NOT SEEDED"}
+                      {ready ? "TRACE THIS CASE →" : "NOT LOADED"}
                     </button>
                   </div>
                 )}

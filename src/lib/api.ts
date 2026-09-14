@@ -260,6 +260,23 @@ export function getCase(id: string): Promise<Case> {
   return request<Case>(`/api/v1/cases/${id}`);
 }
 
+// Null, not thrown, when no case links this wallet — that is the normal
+// state for most wallets (a live trace with no complaint or scenario behind
+// it), not a failure the caller needs to handle specially.
+export async function getCaseForWallet(
+  address: string,
+  chain: string,
+): Promise<Case | null> {
+  try {
+    return await request<Case>(
+      `/api/v1/cases/by-wallet?${new URLSearchParams({ address, chain })}`,
+    );
+  } catch (e) {
+    if (e instanceof ApiRequestError && e.status === 404) return null;
+    throw e;
+  }
+}
+
 export function createCase(body: CaseCreate): Promise<Case> {
   return request<Case>("/api/v1/cases", {
     method: "POST",

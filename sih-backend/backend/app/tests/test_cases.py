@@ -2,7 +2,9 @@ import uuid
 from datetime import datetime, timezone
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.wallet import Wallet
 from app.schemas.common import CaseStatus
 
 
@@ -187,3 +189,55 @@ async def test_case_audit_logging_trail(client: AsyncClient, auth_headers: dict)
     # 4. Export report (triggers export_pdf_report audit log)
     report_res = await client.get(f"/api/v1/cases/{case_id}/report", headers=auth_headers)
     assert report_res.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_case_by_wallet_finds_linked_case(
+    client: AsyncClient, auth_headers: dict, db_session: AsyncSession,
+):
+    """
+    The trace workspace looks this up on every trace so Evidence Trail can
+    auto-select the case behind a wallet without a manual trip through the
+    Cases list — see GET /api/v1/cases/by-wallet.
+    """
+    wallet = Wallet(address="0xByWalletLookup", chain="ETH")
+    db_session.add(wallet)
+    await db_session.commit()
+    await db_session.refresh(wallet)
+
+    case_res = await client.post(
+        "/api/v1/cases",
+        json={
+            "assigned_investigator": "inspector_lookup",
+            "initial_status": "new",
+            "wallet_ids": [str(wallet.id)],
+        },
+        headers=auth_headers,
+    )
+    assert case_res.status_code == 201
+    case_id = case_res.json()["id"]
+
+    # Address matching is case-insensitive; chain is exact.
+    found = await client.get(
+        "/api/v1/cases/by-wallet",
+        params={"address": "0xBYWALLETLOOKUP", "chain": "ETH"},
+        headers=auth_headers,
+    )
+    assert found.status_code == 200
+    assert found.json()["id"] == case_id
+    assert any(w["address"] == "0xByWalletLookup" for w in found.json()["wallets"])
+
+    wrong_chain = await client.get(
+        "/api/v1/cases/by-wallet",
+        params={"address": "0xByWalletLookup", "chain": "TRON"},
+        headers=auth_headers,
+    )
+    assert wrong_chain.status_code == 404
+
+    unlinked = await client.get(
+        "/api/v1/cases/by-wallet",
+        params={"address": "0xNeverLinkedAnywhere", "chain": "ETH"},
+        headers=auth_headers,
+    )
+    assert unlinked.status_code == 404
+    assert unlinked.json()["error"]["code"] == "CASE_NOT_FOUND"

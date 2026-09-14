@@ -95,6 +95,48 @@ async def list_cases(
 
 
 @router.get(
+    "/by-wallet",
+    response_model=CaseRead,
+    status_code=status.HTTP_200_OK,
+    responses={
+        401: {"model": ErrorEnvelope, "description": "Unauthorized"},
+        403: {"model": ErrorEnvelope, "description": "Forbidden"},
+        404: {"model": ErrorEnvelope, "description": "No case links this wallet"},
+    },
+    summary="Find the case a wallet already belongs to, if any",
+)
+async def get_case_by_wallet(
+    current_user: CurrentUserDep,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    address: Annotated[str, Query(min_length=1, max_length=128)],
+    chain: Annotated[str, Query(min_length=1, max_length=16)],
+) -> CaseRead:
+    """
+    Lets the investigation workspace auto-select the case for a wallet the
+    moment it's traced — a seeded scenario's case, or one an earlier
+    complaint/anchor already linked this address to — instead of requiring a
+    manual trip through the Cases list to attach the two. Registered before
+    `/{id}` so "by-wallet" is never swallowed by the UUID path param.
+    """
+    case = await case_service.get_case_for_wallet(db, address, chain)
+    if case is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": {
+                    "code": "CASE_NOT_FOUND",
+                    "message": f"No case links wallet '{address}' on {chain}.",
+                    "details": {"address": address, "chain": chain},
+                }
+            },
+        )
+    return CaseRead.model_validate({
+        **case.__dict__,
+        "wallets": await case_service.get_case_wallets(db, case.id),
+    })
+
+
+@router.get(
     "/{id}",
     response_model=CaseRead,
     status_code=status.HTTP_200_OK,

@@ -20,6 +20,7 @@ import type { Chain, Complaint } from "@/lib/api-types";
 import { formatAmount } from "@/lib/decimal";
 import { truncateAddress } from "@/lib/address";
 import { computeEvidenceStrength } from "@/lib/evidence";
+import { getCaseForWallet } from "@/lib/api";
 
 export const Route = createFileRoute("/dashboard/investigation")({
   component: InvestigationWorkspace,
@@ -544,11 +545,48 @@ function IntelligenceInspector({
 // ─── Workspace ──────────────────────────────────────────────────────────────
 function InvestigationWorkspace() {
   const navigate = useNavigate();
-  const { activeWallet, activeChain, activeCaseNumber, activeCaseStatus } =
-    useCaseContext();
+  const {
+    activeWallet,
+    activeChain,
+    activeCaseNumber,
+    activeCaseStatus,
+    setCaseForWallet,
+  } = useCaseContext();
   const chain = (activeChain || "ETH") as Chain;
 
   const [traceRetryKey, setTraceRetryKey] = useState(0);
+
+  // Whenever the wallet being traced changes, find out whether it already
+  // belongs to a case (a seeded scenario, or one an earlier complaint/anchor
+  // linked it to) and select that case automatically — so Evidence Trail,
+  // opened right after a trace, shows this investigation's real trail
+  // without a manual trip through the Cases list first. Runs for every trace
+  // entry point, not just the Cases page and the scenario picker: keyed on
+  // the wallet itself, so a stale case from a PREVIOUSLY traced wallet is
+  // cleared rather than silently misattributed to this one.
+  useEffect(() => {
+    if (!activeWallet) return;
+    let cancelled = false;
+    getCaseForWallet(activeWallet, chain)
+      .then((c) => {
+        if (cancelled) return;
+        setCaseForWallet(
+          c
+            ? {
+                caseId: c.id,
+                caseNumber: `UG-${c.id.slice(0, 8).toUpperCase()}`,
+                status: c.status,
+              }
+            : null,
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setCaseForWallet(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWallet, chain, setCaseForWallet]);
 
   const {
     nodes: rawNodes,
@@ -882,7 +920,7 @@ function InvestigationWorkspace() {
           </div>
         )}
 
-        {/* A seeded case must never be able to look like a live one. The
+        {/* A synthetic case must never be able to look like a live one. The
             engine asserts this on the trace result; nothing here infers it. */}
         {meta && meta.dataSource !== "live" && (
           <div
@@ -904,7 +942,7 @@ function InvestigationWorkspace() {
                 border: "1px solid oklch(0.79 0.15 74 / 50%)",
               }}
             >
-              {meta.dataSource === "mixed" ? "PARTLY SEEDED" : "SEEDED SCENARIO"}
+              {meta.dataSource === "mixed" ? "PARTLY SYNTHETIC" : "SYNTHETIC WALLET"}
             </span>
             <span
               style={{
@@ -914,8 +952,8 @@ function InvestigationWorkspace() {
               }}
             >
               {meta.dataSource === "mixed"
-                ? "Part of this trail came from seeded scenario data and part from live explorers."
-                : "Seeded scenario — synthetic addresses and transactions, traced by the real engine. Not live blockchain data."}
+                ? "Part of this trail came from synthetic wallet data and part from live explorers."
+                : "Synthetic wallet — a constructed address and transaction history, traced by the real engine. Not live blockchain data."}
             </span>
           </div>
         )}

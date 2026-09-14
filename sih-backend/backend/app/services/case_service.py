@@ -104,6 +104,29 @@ async def get_case_by_id(db: AsyncSession, case_id: uuid.UUID) -> Optional[Case]
     return res.scalar_one_or_none()
 
 
+async def get_case_for_wallet(db: AsyncSession, address: str, chain: str) -> Optional[Case]:
+    """
+    The case a wallet already belongs to, if any — so tracing a wallet that IS
+    part of an investigation (a seeded scenario, or one linked earlier via a
+    complaint/anchor) can surface that case automatically instead of leaving
+    the investigator to find and select it by hand on the Cases page.
+
+    Address matched case-insensitively (chains vary on casing conventions);
+    chain matched exactly. Newest case wins on the rare case a wallet is
+    linked to more than one — most likely to be the one still being worked.
+    """
+    stmt = (
+        select(Case)
+        .join(CaseWallet, CaseWallet.case_id == Case.id)
+        .join(Wallet, Wallet.id == CaseWallet.wallet_id)
+        .where(func.lower(Wallet.address) == address.strip().lower(), Wallet.chain == chain)
+        .order_by(Case.opened_at.desc())
+        .limit(1)
+    )
+    res = await db.execute(stmt)
+    return res.scalar_one_or_none()
+
+
 async def get_case_wallets(db: AsyncSession, case_id: uuid.UUID) -> List[Wallet]:
     """Return the wallets explicitly linked to a case."""
     stmt = (
