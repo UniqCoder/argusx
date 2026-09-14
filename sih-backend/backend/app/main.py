@@ -92,7 +92,23 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ── CORS (dev: allow all localhost/LAN origins; production: lock down) ────────
+# ── CORS (dev: allow all localhost/LAN origins; production: explicit allowlist) ──
+# Production origins come from CORS_ALLOWED_ORIGINS (comma-separated exact
+# origins) plus an optional regex for a Vercel project's preview-deployment
+# subdomains (CORS_ALLOWED_ORIGIN_REGEX) — Vercel mints a new unique URL per
+# preview build, so an exact-match list alone would need editing on every PR.
+# Both default to closed (nothing allowed) rather than the old bare `[]`
+# silently blocking every request with no way to tell it apart from
+# "not configured yet" — the startup log line below makes that visible.
+import os as _os
+
+_prod_regex = _os.environ.get("CORS_ALLOWED_ORIGIN_REGEX", "").strip() or None
+if settings.app_env != "development" and not settings.cors_allowed_origins_list and not _prod_regex:
+    logger.warning(
+        "cors_not_configured",
+        extra={"hint": "Set CORS_ALLOWED_ORIGINS (and optionally CORS_ALLOWED_ORIGIN_REGEX) — every browser request will be blocked until then."},
+    )
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -102,8 +118,10 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:8000",
-    ] if settings.app_env == "development" else [],
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$" if settings.app_env == "development" else None,
+    ] if settings.app_env == "development" else settings.cors_allowed_origins_list,
+    allow_origin_regex=(
+        r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$" if settings.app_env == "development" else _prod_regex
+    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

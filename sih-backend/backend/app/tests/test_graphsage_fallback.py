@@ -1,5 +1,12 @@
 import pytest
 
+# torch is deliberately not in requirements.txt (see the comment there) —
+# graphsage_risk.py is non-production research, kept in the repo for
+# reference but never imported by the live /risk path. Skip rather than
+# fail when it's absent, instead of forcing every environment to carry a
+# multi-GB CUDA dependency it never uses just to collect this one test.
+torch = pytest.importorskip("torch")
+
 from app.ml.graphsage_risk import compute_graph_context_summary
 
 

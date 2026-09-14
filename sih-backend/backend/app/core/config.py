@@ -72,6 +72,18 @@ class Settings(BaseSettings):
     # ── Ollama (Phase 6) ──────────────────────────────────────────────────────
     ollama_base_url: str = "http://localhost:11434"
 
+    # ── CORS (production) ────────────────────────────────────────────────────
+    # Comma-separated exact origins allowed to call this API when app_env is
+    # NOT "development" (dev mode instead allows any localhost/127.0.0.1
+    # origin — see main.py). Empty by default so a fresh deploy fails CLOSED
+    # (every browser request blocked) rather than accidentally open; the
+    # deployed frontend's real origin must be set explicitly via this var.
+    cors_allowed_origins: str = ""
+
+    @property
+    def cors_allowed_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_allowed_origins.split(",") if o.strip()]
+
     def validate_production_safety(self) -> list[str]:
         """Return a list of warnings if prod-unsafe defaults are still present."""
         warnings: list[str] = []
