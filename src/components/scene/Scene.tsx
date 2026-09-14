@@ -1,4 +1,6 @@
 import { Environment, Lightformer } from "@react-three/drei";
+import { useThree } from "@react-three/fiber";
+import { useEffect } from "react";
 
 import { BitcoinCoin } from "./BitcoinCoin";
 import { CameraRig } from "./CameraRig";
@@ -8,6 +10,31 @@ import { TransactionPath } from "./TransactionPath";
 
 interface SceneProps {
   reducedMotion?: boolean;
+}
+
+/**
+ * Forces every material in the scene to compile its WebGL shader program up
+ * front, at mount, instead of lazily the first time each object actually
+ * becomes visible.
+ *
+ * BitcoinCoin and TransactionPath sit at `visible={false}` (or opacity 0)
+ * until scroll crosses their reveal point — BitcoinCoin's meshStandardMaterial
+ * (a PBR shader, the most expensive kind to compile) first renders at
+ * progress ~0.14, right where beat 01 hands off to beat 02. Compiling a new
+ * shader program blocks the main thread for tens to hundreds of
+ * milliseconds, which is exactly the "sticks for a second" felt while
+ * scrolling through phase 1. `gl.compile()` walks the whole scene graph
+ * (visibility does not stop traversal) and compiles every program during the
+ * still frame right after mount, before the user has scrolled at all, so
+ * every later reveal — the coin, the TRON transaction path — is just an
+ * already-compiled draw call.
+ */
+function ShaderWarmup() {
+  const { gl, scene, camera } = useThree();
+  useEffect(() => {
+    gl.compile(scene, camera);
+  }, [gl, scene, camera]);
+  return null;
 }
 
 export function Scene({ reducedMotion = false }: SceneProps) {
@@ -62,6 +89,7 @@ export function Scene({ reducedMotion = false }: SceneProps) {
       <NetworkField reducedMotion={reducedMotion} />
       <BitcoinCoin reducedMotion={reducedMotion} />
       <TransactionPath reducedMotion={reducedMotion} />
+      <ShaderWarmup />
     </>
   );
 }

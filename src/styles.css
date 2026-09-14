@@ -299,9 +299,16 @@ body {
   position: absolute;
   max-width: min(30rem, 82vw);
   /* Promote beats to their own compositor layer so opacity + transform
-     animations never trigger a paint — GPU-only compositing. */
+     animations never trigger a paint — GPU-only compositing. No CSS
+     transition here on purpose: opacity is already a continuous function of
+     scroll progress (see band() in scroll-store.ts), recomputed on every
+     quantized scroll step. A transition on top of an already-eased,
+     already-live-updating value doesn't add smoothness — it adds a fixed
+     0.15s lag behind the real scroll position, which reads as the beat
+     visibly "catching up" a moment after you've already scrolled past a
+     crossfade point. That lag is what felt like a stick during the beat
+     01 -> 02 handoff. */
   will-change: transform, opacity;
-  transition: opacity 0.15s linear;
 }
 
 .beat--left {
@@ -488,7 +495,9 @@ body {
   letter-spacing: 0.3em;
   text-transform: uppercase;
   color: var(--color-muted-foreground);
-  transition: opacity 0.4s ease;
+  /* Same reasoning as .beat above: opacity is already driven every scroll
+     tick by JS (StoryOverlay), so a CSS transition here only delays the
+     fade-out behind where the user has actually scrolled to. */
 }
 
 .scroll-hint__line {
