@@ -35,7 +35,11 @@ export interface InvestigationCase {
   // The real backend case UUID — required for any getCase()/getCaseReport()
   // call. `id` above is a cosmetic display label; this is the real key.
   rawId: string;
-  fraudType: FraudType;
+  // A real complaint's fraud_typology is a free string from NCRP categories
+  // (e.g. "investment_fraud"), not this curated display-cased set — widened
+  // from FraudType so real backend data never needs a lossy remap to fit a
+  // fixed list designed for an earlier hardcoded-mock version of this page.
+  fraudType: string;
   blockchain: Blockchain;
   reportedWallet: string;
   traceStatus: CaseStatus;

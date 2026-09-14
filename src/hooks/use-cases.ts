@@ -25,17 +25,17 @@ const LABEL_MAP: Record<CaseStatus, string> = {
   closed: "Closed",
 };
 
-// The backend Case model doesn't carry fraud type or victim count directly
-// (those live on the Complaint, which this list endpoint doesn't join) —
-// left genuinely unknown rather than fabricated. Wallet/chain/risk DO come
-// from the API's real `wallets` join: the first linked wallet, when one
-// exists.
+// Victim count still isn't joined by this endpoint — left genuinely unknown
+// rather than fabricated. Fraud type and wallet/chain/risk DO come from the
+// API's real data: fraud_type from complaints naming this case's wallets
+// (null, shown as "Unclassified", when none has been filed yet), wallet
+// fields from the first linked wallet, when one exists.
 function mapCase(c: Case): InvestigationCase {
   const wallet = c.wallets[0];
   return {
     id: `UG-${c.id.slice(0, 8).toUpperCase()}`,
     rawId: c.id,
-    fraudType: "Unclassified",
+    fraudType: c.fraud_type ?? "Unclassified",
     blockchain: (wallet?.chain as InvestigationCase["blockchain"]) ?? "ETH",
     reportedWallet: wallet?.address ?? "",
     traceStatus: STATUS_MAP[c.status] ?? "live-trace",

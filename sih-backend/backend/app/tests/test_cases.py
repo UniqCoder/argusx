@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timezone
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.wallet import Wallet
@@ -241,3 +242,54 @@ async def test_get_case_by_wallet_finds_linked_case(
     )
     assert unlinked.status_code == 404
     assert unlinked.json()["error"]["code"] == "CASE_NOT_FOUND"
+
+    # No complaint names this wallet — fraud_type must stay honestly null,
+    # never a hardcoded "Unclassified" baked into the API response itself
+    # (the client renders null as that label).
+    assert found.json()["fraud_type"] is None
+
+
+@pytest.mark.asyncio
+async def test_case_fraud_type_derived_from_linked_complaints(
+    client: AsyncClient, auth_headers: dict, db_session: AsyncSession,
+):
+    """
+    fraud_type isn't a field on Case — it's read from the real complaints
+    naming the case's wallets, the most-cited typology winning when more than
+    one has been filed. Regression for a bug where every case showed
+    "Unclassified" regardless of real complaint data.
+    """
+    address, chain = "0xFraudTypeWallet", "ETH"
+    for typology in ("investment_fraud", "investment_fraud", "phishing"):
+        comp_res = await client.post(
+            "/api/v1/complaints",
+            json={
+                "source_platform": "ncrp",
+                "fraud_typology": typology,
+                "filed_at": datetime.now(timezone.utc).isoformat(),
+                "wallets": [{"address": address, "chain": chain}],
+            },
+            headers=auth_headers,
+        )
+        assert comp_res.status_code == 201
+
+    wallet = (
+        await db_session.execute(
+            select(Wallet).where(Wallet.address == address, Wallet.chain == chain)
+        )
+    ).scalar_one()
+
+    case_res = await client.post(
+        "/api/v1/cases",
+        json={
+            "assigned_investigator": "inspector_typology",
+            "initial_status": "new",
+            "wallet_ids": [str(wallet.id)],
+        },
+        headers=auth_headers,
+    )
+    assert case_res.status_code == 201
+    assert case_res.json()["fraud_type"] == "investment_fraud"
+
+    get_res = await client.get(f"/api/v1/cases/{case_res.json()['id']}", headers=auth_headers)
+    assert get_res.json()["fraud_type"] == "investment_fraud"

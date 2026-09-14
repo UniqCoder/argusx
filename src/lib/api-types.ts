@@ -94,6 +94,9 @@ export interface Case {
   opened_at: string;
   closed_at?: string | null;
   wallets: CaseWallet[];
+  // The most-cited real fraud_typology among complaints naming this case's
+  // wallets. null when no complaint has been filed against any of them yet.
+  fraud_type?: string | null;
 }
 
 export interface Alert {

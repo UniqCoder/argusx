@@ -105,6 +105,7 @@ function TraceWallet() {
         caseNumber: `UG-${scenario.case_id.slice(0, 8).toUpperCase()}`,
         wallet: scenario.anchor_address,
         chain: scenario.anchor_chain,
+        fraudType: scenario.typology,
       });
     } else {
       setActiveWallet(scenario.anchor_address, scenario.anchor_chain);

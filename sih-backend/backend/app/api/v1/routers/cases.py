@@ -53,6 +53,7 @@ async def create_case(
     return CaseRead.model_validate({
         **case.__dict__,
         "wallets": await case_service.get_case_wallets(db, case.id),
+        "fraud_type": await case_service.get_case_fraud_type(db, case.id),
     })
 
 
@@ -85,6 +86,7 @@ async def list_cases(
         items.append(CaseRead.model_validate({
             **case.__dict__,
             "wallets": await case_service.get_case_wallets(db, case.id),
+            "fraud_type": await case_service.get_case_fraud_type(db, case.id),
         }))
     return PaginatedResponse(
         total=total,
@@ -133,6 +135,7 @@ async def get_case_by_wallet(
     return CaseRead.model_validate({
         **case.__dict__,
         "wallets": await case_service.get_case_wallets(db, case.id),
+        "fraud_type": await case_service.get_case_fraud_type(db, case.id),
     })
 
 
@@ -175,6 +178,7 @@ async def get_case(
     return CaseRead.model_validate({
         **case.__dict__,
         "wallets": await case_service.get_case_wallets(db, case.id),
+        "fraud_type": await case_service.get_case_fraud_type(db, case.id),
     })
 
 
@@ -210,6 +214,7 @@ async def update_case(
     return CaseRead.model_validate({
         **updated_case.__dict__,
         "wallets": await case_service.get_case_wallets(db, updated_case.id),
+        "fraud_type": await case_service.get_case_fraud_type(db, updated_case.id),
     })
 
 

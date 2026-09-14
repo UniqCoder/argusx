@@ -33,6 +33,10 @@ class CaseRead(BaseModel):
     opened_at: datetime
     closed_at: Optional[datetime] = None
     wallets: List[CaseWalletRead] = Field(default_factory=list)
+    # The most-cited real fraud_typology among complaints naming this case's
+    # wallets. None when no complaint has been filed against any of them yet
+    # — the client renders that as "Unclassified", never fabricated here.
+    fraud_type: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

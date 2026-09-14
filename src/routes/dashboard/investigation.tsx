@@ -576,6 +576,7 @@ function InvestigationWorkspace() {
                 caseId: c.id,
                 caseNumber: `UG-${c.id.slice(0, 8).toUpperCase()}`,
                 status: c.status,
+                fraudType: c.fraud_type ?? null,
               }
             : null,
         );

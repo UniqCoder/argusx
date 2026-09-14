@@ -63,7 +63,12 @@ export interface CaseContext {
   // PREVIOUSLY traced wallet doesn't linger and misattribute this one's
   // Evidence Trail. Pass null when the lookup found no case.
   setCaseForWallet: (
-    params: { caseId: string; caseNumber: string; status?: string } | null,
+    params: {
+      caseId: string;
+      caseNumber: string;
+      status?: string;
+      fraudType?: string | null;
+    } | null,
   ) => void;
 
   // Records a wallet (with the chain it was searched on) into the "recently
@@ -134,6 +139,7 @@ export const useCaseContext = create<CaseContext>((set, get) => ({
             activeCaseId: params.caseId,
             activeCaseNumber: params.caseNumber,
             activeCaseStatus: params.status || null,
+            activeFraudType: params.fraudType || null,
           }
         : {
             activeCaseId: null,

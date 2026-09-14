@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.case import Case, CaseWallet
+from app.models.complaint import Complaint, ComplaintWallet
 from app.models.wallet import Wallet
 from app.schemas.case import CasePatch
 from app.schemas.common import CaseStatus
@@ -136,6 +137,31 @@ async def get_case_wallets(db: AsyncSession, case_id: uuid.UUID) -> List[Wallet]
     )
     res = await db.execute(stmt)
     return list(res.scalars().all())
+
+
+async def get_case_fraud_type(db: AsyncSession, case_id: uuid.UUID) -> Optional[str]:
+    """
+    The real fraud typology behind a case, read from the complaints that name
+    its wallets — the Case row itself carries no typology of its own (a case
+    is opened around a wallet, not a crime category). "Unclassified" used to
+    be hardcoded on every case regardless of whether one was ever filed; this
+    reports the most-cited real `fraud_typology` among linked complaints, or
+    None (rendered "Unclassified" client-side) when no complaint has been
+    filed against any wallet in this case yet — never a guess.
+    """
+    stmt = (
+        select(Complaint.fraud_typology, func.count().label("n"))
+        .select_from(Complaint)
+        .join(ComplaintWallet, ComplaintWallet.complaint_id == Complaint.id)
+        .join(CaseWallet, CaseWallet.wallet_id == ComplaintWallet.wallet_id)
+        .where(CaseWallet.case_id == case_id, Complaint.fraud_typology.is_not(None))
+        .group_by(Complaint.fraud_typology)
+        .order_by(func.count().desc())
+        .limit(1)
+    )
+    res = await db.execute(stmt)
+    row = res.first()
+    return row[0] if row else None
 
 
 async def list_cases(
