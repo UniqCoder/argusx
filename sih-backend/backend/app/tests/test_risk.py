@@ -518,6 +518,88 @@ async def test_new_evidence_snapshot_legitimately_changes_result(monkeypatch, db
 
 
 @pytest.mark.asyncio
+async def test_mixer_exposure_from_own_trace_raises_score(monkeypatch, db_session):
+    """
+    Regression: a wallet whose own persisted trace (app/engine/taint.py)
+    reaches a known mixer used to score however the raw behavioral model
+    felt like — 0.01-0.05/100 was observed live for demo wallets that trace
+    straight to Tornado Cash — because the risk model never looked at Layer
+    1's own findings for this exact wallet. It now does: a wallet with a
+    MIXER_BOUNDARY terminal in its own trace is floored to HIGH and carries
+    a "mixer_exposure" evidence item, on top of whatever the behavioral
+    score alone would have said.
+    """
+    import uuid
+    from datetime import datetime, timezone
+
+    from app.models.engine import Anchor, TaintNode, Trace
+    from app.schemas.common import Chain
+    from app.services.risk_service import (
+        MIXER_EXPOSURE_SCORE_FLOOR,
+        evaluate_wallet_risk,
+    )
+
+    addr = "0xMixerExposedWallet"
+    chain = "ETH"
+
+    anchor = Anchor(
+        id=uuid.uuid4(), case_id=None, address=addr, chain=chain,
+        attestation_class="C", attestation_type="scenario",
+        source_ref="test-mixer-exposure", asserted_by="test",
+        asserted_at=datetime.now(timezone.utc), system_generated=False,
+    )
+    db_session.add(anchor)
+    await db_session.flush()
+
+    trace = Trace(id=uuid.uuid4(), anchor_id=anchor.id, reproducible_hash="a" * 64)
+    db_session.add(trace)
+    await db_session.flush()
+
+    db_session.add_all([
+        TaintNode(
+            trace_id=trace.id, address=addr, chain=chain, hop=0,
+            taint_fraction=1.0, tainted_value=1.0, terminal_kind=None,
+        ),
+        TaintNode(
+            trace_id=trace.id, address="0xIntermediateHop", chain=chain, hop=1,
+            taint_fraction=1.0, tainted_value=1.0, terminal_kind=None,
+        ),
+        TaintNode(
+            trace_id=trace.id, address="0x12D66f87A04A9E220743712cE6d9bB1B5616B8Fc",
+            chain=chain, hop=2, taint_fraction=1.0, tainted_value=0.1,
+            terminal_kind="MIXER_BOUNDARY", entity_name="Tornado Cash 0.1 ETH",
+        ),
+    ])
+    await db_session.commit()
+
+    ts = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    quiet_txs = [
+        RawTx(tx_hash="mixTx1", from_address="0xSenderQuiet", to_address=addr,
+              amount=1.0, chain="ETH", timestamp=ts, asset="ETH"),
+    ]
+
+    # _patch_deterministic_pipeline only wires up the BTC explorer (plus the
+    # chain-agnostic graph-features/embedding fakes this ETH wallet also
+    # needs) — give it a matching fake ETH explorer for this test.
+    import app.services.risk_service as risk_service_module
+
+    async def _fake_eth_get_transactions(address, limit=25):
+        return list(quiet_txs)
+
+    _patch_deterministic_pipeline(monkeypatch, txs=quiet_txs)
+    monkeypatch.setattr(risk_service_module.eth_explorer, "get_transactions", _fake_eth_get_transactions)
+
+    result = await evaluate_wallet_risk(db_session, addr, Chain.ETH)
+
+    assert result.risk_score >= MIXER_EXPOSURE_SCORE_FLOOR
+    feature_names = [e.feature_name for e in result.evidence]
+    assert "mixer_exposure" in feature_names
+    mixer_evidence = next(e for e in result.evidence if e.feature_name == "mixer_exposure")
+    assert "Tornado Cash 0.1 ETH" in mixer_evidence.detail
+    assert result.risk_source == "corroborated"
+
+
+@pytest.mark.asyncio
 async def test_no_artificial_clamping_of_normal_scores(monkeypatch, db_session):
     """A genuine model probability strictly between 0 and 1 passes through
     untouched: no min/max clamp nudges it toward a round-looking number, and

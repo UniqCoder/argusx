@@ -8,6 +8,7 @@ import structlog
 from datetime import datetime, timezone
 from typing import Optional
 import numpy as np
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ml.explain import explain_wallet_risk
@@ -20,7 +21,9 @@ from app.ml.features import (
 )
 from app.ml.model import get_model_version, map_score_to_tier, predict_risk_score
 from app.ml.relative_features import relative_reference_state
+from app.models.engine import Anchor, TaintNode, Trace
 from app.schemas.common import Chain, RiskTier
+from app.schemas.engine import TerminalKind
 from app.schemas.wallet import RiskEvidence, RiskResponse
 from app.schemas.common import EvidenceDirection
 from app.services import complaint_service, registry_service, sanctions_service
@@ -89,6 +92,50 @@ def gate_tier(score: float, tier: RiskTier, corroborated: bool) -> RiskTier:
     return tier
 
 
+# ── Mixer-exposure signal ────────────────────────────────────────────────────
+# The behavioral model only ever looks at THIS address's own transaction shape
+# — it has no way to know that Layer 1 (app/engine/taint.py) already traced
+# this exact wallet's own outgoing funds to a named mixer contract (Tornado
+# Cash and friends, app/engine/registries.py). That is real, deterministic,
+# already-computed on-chain evidence sitting unused in the traces/taint_nodes
+# tables: a wallet whose own money is PROVEN to reach a known laundering
+# conduit is not "clean" just because its raw value/tx-count stats look like
+# a normal high-volume address (see the two ETH demo wallets that showed
+# 0.01-0.05/100 despite tracing straight to Tornado Cash — the model was
+# never shown that fact). Additive bonus (real but heuristic terminal
+# classification, not an official designation) plus a HIGH floor — same
+# tier as 3+ complaints, one tier under sanctions, because "this address's
+# funds reached a mixer" is on-chain fact, stronger than an unverified
+# complaint but not a government designation on THIS wallet itself.
+MIXER_EXPOSURE_BONUS = 0.20
+MIXER_EXPOSURE_SCORE_FLOOR = 0.60
+
+
+async def get_mixer_exposure(db: AsyncSession, address: str, chain: str) -> Optional[dict]:
+    """
+    The nearest MIXER_BOUNDARY terminal in this wallet's own most recent
+    trace (as anchor), if any — real evidence from a real, already-persisted
+    Layer 1 run, not re-computed here and never fabricated when no trace has
+    been run for this wallet yet (returns None, exactly like "no complaints").
+    """
+    stmt = (
+        select(TaintNode.entity_name, TaintNode.hop)
+        .join(Trace, Trace.id == TaintNode.trace_id)
+        .join(Anchor, Anchor.id == Trace.anchor_id)
+        .where(
+            func.lower(Anchor.address) == address.strip().lower(),
+            Anchor.chain == chain,
+            TaintNode.terminal_kind == TerminalKind.MIXER_BOUNDARY.value,
+        )
+        .order_by(Trace.started_at.desc(), TaintNode.hop.asc())
+        .limit(1)
+    )
+    row = (await db.execute(stmt)).first()
+    if row is None:
+        return None
+    return {"entity_name": row[0], "hop": row[1]}
+
+
 btc_explorer = BitcoinExplorer()
 eth_explorer = EthereumExplorer()
 tron_explorer = TronExplorer()
@@ -126,6 +173,10 @@ async def evaluate_wallet_risk(
     # front so it's available for both the score blend and the tier gate
     # below, and for the corroboration evidence item.
     complaint_count = await complaint_service.complaint_count_for(db, address, chain.value)
+
+    # Does this wallet's own already-persisted trace reach a known mixer?
+    # See MIXER_EXPOSURE_BONUS above for why this matters and how it's used.
+    mixer_exposure = await get_mixer_exposure(db, address, chain.value)
 
     # 1. Fetch transactions. Seeded-scenario addresses (app/services/scenarios/)
     #    are answered from the same local fixture the taint engine already uses
@@ -228,7 +279,7 @@ async def evaluate_wallet_risk(
         model_version = get_model_version()
         snapshot_id = hashlib.sha256(
             model_vector.tobytes()
-            + f"|{complaint_count}|{bool(sanction)}|{model_version}|{FEATURE_SCHEMA_VERSION}".encode()
+            + f"|{complaint_count}|{bool(sanction)}|{bool(mixer_exposure)}|{model_version}|{FEATURE_SCHEMA_VERSION}".encode()
         ).hexdigest()[:16]
 
         # 4. Model inference. 4 decimal places, not 3 — a genuinely low-risk
@@ -242,7 +293,9 @@ async def evaluate_wallet_risk(
         #    non-ML evidence added below (sanctions, complaint corroboration)
         #    so the panel always tops out at 5 factors total, never 5 ML
         #    factors plus extras bolted on past that.
-        extra_evidence_slots = (1 if sanction else 0) + (1 if complaint_count > 0 else 0)
+        extra_evidence_slots = (
+            (1 if sanction else 0) + (1 if complaint_count > 0 else 0) + (1 if mixer_exposure else 0)
+        )
         evidence = explain_wallet_risk(model_vector, top_k=max(1, 5 - extra_evidence_slots))
 
         # Complaint corroboration is additive — real evidence the model can't
@@ -275,7 +328,29 @@ async def evaluate_wallet_risk(
                 *evidence,
             ]
 
-        corroborated = complaint_count >= 2
+        # Mixer exposure is additive too, plus a HIGH floor — see
+        # MIXER_EXPOSURE_BONUS above. Applied after the complaint blend so a
+        # wallet with both signals gets credit for each; before the sanctions
+        # blend so a sanctioned address's mixer trail still shows in the
+        # boosted score the sanctions floor is taken against.
+        if mixer_exposure:
+            boosted_score = round(min(1.0, boosted_score + MIXER_EXPOSURE_BONUS), 4)
+            boosted_score = round(max(boosted_score, MIXER_EXPOSURE_SCORE_FLOOR), 4)
+            hop = mixer_exposure["hop"]
+            evidence = [
+                RiskEvidence(
+                    feature_name="mixer_exposure",
+                    contribution=MIXER_EXPOSURE_BONUS,
+                    direction=EvidenceDirection.increases_risk,
+                    detail=(
+                        f"This wallet's own traced funds reach {mixer_exposure['entity_name']}, "
+                        f"a known mixer, {hop} hop{'s' if hop != 1 else ''} downstream."
+                    ),
+                ),
+                *evidence,
+            ]
+
+        corroborated = complaint_count >= 2 or bool(mixer_exposure)
 
         if sanction:
             # Blend, don't overwrite: a confirmed OFAC match is a floor on
@@ -351,6 +426,7 @@ async def evaluate_wallet_risk(
         osint_hit_count=len(osint_evidence),
         shap_top5=shap_top5,
         complaint_count=complaint_count,
+        mixer_exposure=mixer_exposure,
         corroborated=corroborated,
         model_version=model_version,
         feature_schema_version=FEATURE_SCHEMA_VERSION,
@@ -361,7 +437,7 @@ async def evaluate_wallet_risk(
         "sanctions_blended"
         if sanction
         else "corroborated"
-        if complaint_count > 0
+        if complaint_count > 0 or mixer_exposure
         else "ml_model"
     )
 
@@ -383,6 +459,11 @@ async def evaluate_wallet_risk(
             )
         elif sanction:
             reason = f"OFAC-sanctioned entity: {sanction.get('designation', 'unknown')}."
+        elif mixer_exposure:
+            reason = (
+                f"This wallet's own traced funds reach {mixer_exposure['entity_name']} — "
+                "known mixer exposure."
+            )
         elif complaint_count == 1:
             reason = "1 complaint names this wallet; behavioral model score applied, awaiting further corroboration."
         else:
