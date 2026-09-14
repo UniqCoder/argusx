@@ -5,7 +5,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.schemas.common import SourcePlatform
+from app.schemas.common import Chain, SourcePlatform
+
+
+class ComplaintWalletIn(BaseModel):
+    """A wallet the complainant names in their report."""
+    address: str
+    chain: Chain
 
 
 class ComplaintCreate(BaseModel):
@@ -17,6 +23,12 @@ class ComplaintCreate(BaseModel):
     filed_at: datetime
     state: Optional[str] = None
     district: Optional[str] = None
+    # Wallets this complaint names. Without this field, ingestion could never
+    # write complaint_wallets -- the ONLY table POST /api/v1/correlate reads --
+    # so cross-victim correlation returned correlation_score 0.0 for every
+    # wallet that existed and 404 for every wallet that did not, on any
+    # database not seeded by scripts/generate_synthetic_ncrp.py.
+    wallets: List[ComplaintWalletIn] = Field(default_factory=list)
 
 
 class ComplaintRead(BaseModel):

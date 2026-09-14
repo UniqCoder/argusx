@@ -1,18 +1,24 @@
-import { useCaseContext } from "@/store/case-context-store";
+import { useCaseContext, type RecentWallet } from "@/store/case-context-store";
 import { truncateAddress } from "@/lib/address";
+// Ticker shown next to each recent wallet so the operator can see which chain
+// that address was searched on. Shared with every other surface via
+// src/lib/chains.ts — this file used to keep its own copy, which is how "BSC"
+// showed as "BSC" here and "BNB" elsewhere.
+import { CHAIN_TICKER } from "@/lib/chains";
 import { useState } from "react";
 
 export function WalletSelector() {
-  const { activeWallet, activeChain, setActiveWallet, recentWallets } =
-    useCaseContext();
+  const { activeWallet, setActiveWallet, recentWallets } = useCaseContext();
   const [isOpen, setIsOpen] = useState(false);
 
   const wallets = recentWallets;
 
-  const handleWalletSelect = (wallet: string) => {
-    const chain = (activeChain || "ETH") as
-      "BTC" | "ETH" | "TRON" | "BSC" | "Polygon";
-    setActiveWallet(wallet, chain);
+  // Restores BOTH the address and the chain it was searched on. Reusing the
+  // currently-active chain here was the chain-mismatch bug: an ETH address
+  // could get traced as BTC and vice versa, making the backend query the
+  // wrong explorer and the whole trace fail with "Backend unreachable".
+  const handleWalletSelect = (entry: RecentWallet) => {
+    setActiveWallet(entry.address, entry.chain);
     setIsOpen(false);
   };
 
@@ -69,16 +75,16 @@ export function WalletSelector() {
               No wallets searched yet this session.
             </p>
           )}
-          {wallets.map((wallet) => (
+          {wallets.map((entry) => (
             <button
-              key={wallet}
-              onClick={() => handleWalletSelect(wallet)}
+              key={`${entry.chain}:${entry.address}`}
+              onClick={() => handleWalletSelect(entry)}
               style={{
                 width: "100%",
                 padding: "0.5rem 0.75rem",
                 textAlign: "left",
                 background:
-                  activeWallet === wallet
+                  activeWallet === entry.address
                     ? "oklch(0.83 0.14 205 / 8%)"
                     : "transparent",
                 border: "none",
@@ -86,30 +92,44 @@ export function WalletSelector() {
                 fontFamily: "var(--font-mono)",
                 fontSize: "0.6rem",
                 color:
-                  activeWallet === wallet
+                  activeWallet === entry.address
                     ? "var(--color-accent)"
                     : "var(--color-muted-foreground)",
                 cursor: "pointer",
                 transition: "all 0.12s",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "0.5rem",
               }}
               onMouseEnter={(e) => {
-                if (activeWallet !== wallet) {
+                if (activeWallet !== entry.address) {
                   e.currentTarget.style.background = "oklch(0.98 0 0 / 2%)";
                   e.currentTarget.style.color = "var(--color-foreground)";
                 }
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.background =
-                  activeWallet === wallet
+                  activeWallet === entry.address
                     ? "oklch(0.83 0.14 205 / 8%)"
                     : "transparent";
                 e.currentTarget.style.color =
-                  activeWallet === wallet
+                  activeWallet === entry.address
                     ? "var(--color-accent)"
                     : "var(--color-muted-foreground)";
               }}
             >
-              {truncateAddress(wallet)}
+              <span>{truncateAddress(entry.address)}</span>
+              <span
+                style={{
+                  fontSize: "0.52rem",
+                  letterSpacing: "0.08em",
+                  opacity: 0.7,
+                  flexShrink: 0,
+                }}
+              >
+                {CHAIN_TICKER[entry.chain]}
+              </span>
             </button>
           ))}
         </div>

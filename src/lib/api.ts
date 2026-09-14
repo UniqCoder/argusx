@@ -10,6 +10,8 @@ import type {
   RiskResponse,
   DepositCheckRequest,
   DepositCheckResponse,
+  DepositDecisionRequest,
+  DepositDecisionResponse,
   AnchorCreate,
   AnchorRead,
   EngineTraceRequest,
@@ -23,10 +25,12 @@ import type {
   CasePatch,
   Alert,
   Complaint,
+  ComplaintCreate,
   ComplaintDetail,
   HealthResponse,
   Chain,
   CaseStatus,
+  ScenarioListResponse,
 } from "./api-types";
 
 const BASE =
@@ -202,6 +206,34 @@ export function checkDeposit(
   });
 }
 
+/**
+ * Record what an investigator did with a Deposit Watch verdict. Previously
+ * "Override / Allow" and "Allow Transaction" only flipped local component
+ * state — a compliance override left no trace anywhere. This writes to the
+ * same tamper-evident evidence ledger a trace decision writes to.
+ */
+export function recordDepositDecision(
+  body: DepositDecisionRequest,
+): Promise<DepositDecisionResponse> {
+  return request<DepositDecisionResponse>("/api/v1/wallets/deposit-decision", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+// ── Seeded scenarios ───────────────────────────────────────────────────────
+/**
+ * The demonstrable investigation cases this backend has seeded.
+ *
+ * The Trace screen used to ship its own hardcoded demo case that bypassed the
+ * API, which is why Cross-Victim, Deposit Watch, Reports and the Evidence Trail
+ * were all empty for it. The server owns the list now; the UI renders what it
+ * is told, including "nothing is seeded".
+ */
+export function listScenarios(): Promise<ScenarioListResponse> {
+  return request<ScenarioListResponse>("/api/v1/scenarios");
+}
+
 // ── Correlation ────────────────────────────────────────────────────────────
 export function correlate(body: CorrelateRequest): Promise<CorrelateResponse> {
   return request<CorrelateResponse>("/api/v1/correlate", {
@@ -283,4 +315,16 @@ export function listComplaints(params?: {
 
 export function getComplaint(id: string): Promise<ComplaintDetail> {
   return request<ComplaintDetail>(`/api/v1/complaints/${id}`);
+}
+
+/**
+ * Ingest a complaint. Pass `wallets` when the complaint names one — that is
+ * the only write path cross-victim correlation depends on. See
+ * app/services/complaint_service.py::create_complaint.
+ */
+export function createComplaint(body: ComplaintCreate): Promise<Complaint> {
+  return request<Complaint>("/api/v1/complaints", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }

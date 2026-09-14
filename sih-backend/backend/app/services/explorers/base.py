@@ -22,6 +22,17 @@ class RawTx:
     amount: float
     chain: Chain
     timestamp: datetime
+    # Which asset `amount` is denominated in. REQUIRED for correct taint
+    # apportionment: the haircut fraction is tainted-inflow / total-inflow, and
+    # summing 100 USDT with 50 TRX into "150 units of inflow" produces a
+    # meaningless denominator. The TRON explorer has always returned TRC-20
+    # token amounts in the same `amount` field as native TRX, so traces of
+    # token-active wallets were mixing assets before this existed.
+    # `asset` is the display ticker; `asset_id` is the contract address, which
+    # is what actually identifies a token (tickers are not unique — anyone can
+    # deploy a contract calling itself USDT).
+    asset: str = ""
+    asset_id: Optional[str] = None
     vasp_tag: Optional[str] = None
     fee_native: Optional[float] = None
     gas_price_gwei: Optional[float] = None

@@ -21,6 +21,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     ForeignKey,
+    Integer,
     Numeric,
     SmallInteger,
     String,
@@ -100,6 +101,49 @@ class Trace(Base):
     # SHA-256 over canonical (anchor params + result) — same inputs always
     # reproduce this exact hash. See app/engine/taint.py::_reproducible_hash.
     reproducible_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    # ── Trace honesty fields ────────────────────────────────────────────────
+    # Persisted (not just returned) so that GET /engine/trace/{id}, the PDF
+    # report and the dashboard graph all describe the same trace with the same
+    # caveats. max_hops above is what was REQUESTED; this is what was reached.
+    depth_reached: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    # frontier_exhausted | node_budget | all_branches_dust
+    termination_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The tainted seed actually used, and where it came from
+    # ("reported_amount" or "observed_inflow"). Previously the seed was
+    # hardcoded to 1.0 and therefore unrecorded and unauditable.
+    seed_value: Mapped[float | None] = mapped_column(Numeric(24, 8), nullable=True)
+    seed_basis: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Onward branches deliberately not followed because their apportioned
+    # value was at/below the dust threshold.
+    pruned_branch_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pruned_branch_value: Mapped[float | None] = mapped_column(Numeric(24, 8), nullable=True)
+    # The asset this trace followed, and how it was chosen. Taint is only
+    # coherent within one asset.
+    asset: Mapped[str | None] = mapped_column(String, nullable=True)
+    asset_basis: Mapped[str | None] = mapped_column(String, nullable=True)
+    other_asset_branch_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Where this trace's transaction data came from: live | seeded_scenario |
+    # mixed. Asserted by the engine from which explorer answered, so the
+    # "seeded scenario" badge is server-side truth rather than a client-side
+    # guess at an address prefix. See migration 0006.
+    data_source: Mapped[str | None] = mapped_column(String, nullable=True)
+    scenario_key: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # ── Roles/clustering trace-level output (migration 0007) ────────────────
+    # Wallets observed funding the anchor (the victim side — the BFS only
+    # walks forward) and the wallet clusters detected in this trace. Stored as
+    # JSON rather than normalised tables: both are a reading of one finished
+    # trace, never queried independently of it, and re-deriving them from
+    # scratch on every GET would let the persisted graph and the read-back
+    # description drift apart.
+    inbound_sources: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    clusters: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Laundering patterns detected + the path-risk breakdown. See
+    # app/engine/typologies.py. JSON for the same reason as clusters above: a
+    # reading of one finished trace, never queried independently of it.
+    typologies: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    path_risk: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
 class TaintNode(Base):
@@ -116,7 +160,8 @@ class TaintNode(Base):
     taint_fraction: Mapped[float] = mapped_column(Numeric(6, 5), nullable=False)
     tainted_value: Mapped[float] = mapped_column(Numeric(24, 8), nullable=False)
     tainted_inr: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
-    # VASP | MIXER_BOUNDARY | BRIDGE | DUST | DEPTH_LIMIT | NODE_LIMIT | None (still frontier)
+    # VASP | MIXER_BOUNDARY | BRIDGE | DUST | DEPTH_LIMIT | NODE_LIMIT |
+    # NO_OUTFLOW | EXPLORER_UNAVAILABLE | DILUTED_OUTFLOW | None (still frontier)
     terminal_kind: Mapped[str | None] = mapped_column(String, nullable=True)
     entity_name: Mapped[str | None] = mapped_column(String, nullable=True)
     entity_jurisdiction: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -127,6 +172,30 @@ class TaintNode(Base):
     parent_address: Mapped[str | None] = mapped_column(String, nullable=True)
     tx_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     tx_amount: Mapped[float | None] = mapped_column(Numeric(24, 8), nullable=True)
+    # Onward transfers from this address that were NOT followed, because after
+    # haircut apportionment they carried value at/below the dust threshold.
+    # Persisted so a sparse graph can always explain itself instead of looking
+    # truncated.
+    pruned_child_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pruned_child_value: Mapped[float | None] = mapped_column(Numeric(24, 8), nullable=True)
+    other_asset_child_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # ── Roles, clustering, cross-chain (migration 0007) ─────────────────────
+    # A reading of the finished graph, computed once and persisted so
+    # GET /engine/trace/{id} and the PDF report describe the same graph the
+    # live trace showed — not a re-derivation that could drift.
+    role: Mapped[str | None] = mapped_column(String, nullable=True)
+    role_basis: Mapped[str | None] = mapped_column(String, nullable=True)
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+    cluster_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    cluster_label: Mapped[str | None] = mapped_column(String, nullable=True)
+    value_in: Mapped[float | None] = mapped_column(Numeric(24, 8), nullable=True)
+    value_out: Mapped[float | None] = mapped_column(Numeric(24, 8), nullable=True)
+    value_parked: Mapped[float | None] = mapped_column(Numeric(24, 8), nullable=True)
+    # "ON_CHAIN" (default) or "CROSS_CHAIN_HEURISTIC" — see app/engine/crosschain.py.
+    link_basis: Mapped[str | None] = mapped_column(String, nullable=True)
+    link_confidence: Mapped[float | None] = mapped_column(Numeric(4, 3), nullable=True)
+    link_detail: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class EvidenceLedgerEntry(Base):

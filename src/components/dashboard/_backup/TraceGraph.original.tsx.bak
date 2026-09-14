@@ -1,0 +1,446 @@
+// ============================================================
+// TraceGraph — the money-trail renderer.
+//
+// Replaces an SVG with a FIXED 980x420 viewBox and no pan/zoom. That was
+// measured as the second half of the "graph only shows a few nodes" problem:
+// the layout clamped every node into that box, so at 40 nodes 40% of them were
+// pinned to the border with centres 14.7px apart (labels need >=68px), and at
+// 80 nodes it was a solid clump. Traces now routinely return 50-75 nodes.
+//
+// So this component: renders the content at its real laid-out size, and lets
+// the investigator pan and zoom over it. Nothing is hidden to make the picture
+// tidy — if the trace found 75 addresses, 75 addresses are reachable on screen.
+//
+// All motion is driven by the single timeline in use-trace-timeline.ts, which
+// is ordered by the real on-chain time each transfer landed. There are no
+// decorative particles and no independent timers: a transfer only animates if
+// it is a real transaction in the trace result.
+// ============================================================
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { TraceNode, TraceEdge } from "@/lib/mock-data";
+import type { TimelineFrame } from "@/hooks/use-trace-timeline";
+
+const NODE_COLOR: Record<TraceNode["type"], string> = {
+  victim: "oklch(0.72 0.024 250)",
+  reported: "oklch(0.64 0.22 18)",
+  intermediate: "oklch(0.83 0.14 205)",
+  bridge: "oklch(0.79 0.15 74)",
+  mixer: "oklch(0.64 0.22 18)",
+  exchange: "oklch(0.79 0.15 74)",
+};
+
+// Terminals that mean "the money is gone / unreachable from here" are drawn
+// with a warning weight; terminals that mean "we know exactly where it is" are
+// drawn as the payoff. A node's colour is never chosen at random or by index.
+const CRITICAL_TERMINALS = new Set([
+  "MIXER_BOUNDARY",
+  "NODE_LIMIT",
+  "EXPLORER_UNAVAILABLE",
+]);
+const PAYOFF_TERMINALS = new Set(["VASP", "NO_OUTFLOW", "BRIDGE"]);
+
+function nodeGlyph(node: TraceNode): string {
+  if (node.hop === 0) return "◎";
+  switch (node.terminalKind) {
+    case "VASP":
+      return "$";
+    case "MIXER_BOUNDARY":
+      return "≋";
+    case "BRIDGE":
+      return "⇄";
+    case "NO_OUTFLOW":
+      return "■";
+    case "EXPLORER_UNAVAILABLE":
+      return "?";
+    case "NODE_LIMIT":
+      return "+";
+    case "DUST":
+    case "DILUTED_OUTFLOW":
+      return "·";
+    default:
+      return "•";
+  }
+}
+
+interface Props {
+  nodes: TraceNode[];
+  edges: TraceEdge[];
+  frame: TimelineFrame;
+  contentWidth: number;
+  contentHeight: number;
+  selectedId: string | null;
+  onSelectNode: (id: string) => void;
+  onSelectEdge: (id: string) => void;
+}
+
+export function TraceGraph({
+  nodes,
+  edges,
+  frame,
+  contentWidth,
+  contentHeight,
+  selectedId,
+  onSelectNode,
+  onSelectEdge,
+}: Props) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [view, setView] = useState({ x: 0, y: 0, k: 1 });
+  const [dragging, setDragging] = useState(false);
+  const dragFrom = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
+
+  // Fit the content when a new trace arrives (identity of the node array
+  // changes only when the underlying result does).
+  const fit = useCallback(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const { width, height } = el.getBoundingClientRect();
+    if (!width || !height) return;
+    const k = Math.min(width / contentWidth, height / contentHeight, 1.4);
+    setView({
+      x: (width - contentWidth * k) / 2,
+      y: (height - contentHeight * k) / 2,
+      k,
+    });
+  }, [contentWidth, contentHeight]);
+
+  useEffect(() => {
+    fit();
+  }, [fit, nodes]);
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => fit());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fit]);
+
+  const onWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const el = wrapRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    setView((v) => {
+      const k = Math.max(0.2, Math.min(4, v.k * (e.deltaY < 0 ? 1.12 : 1 / 1.12)));
+      // Zoom about the cursor so the thing under the pointer stays put.
+      return {
+        k,
+        x: mx - ((mx - v.x) * k) / v.k,
+        y: my - ((my - v.y) * k) / v.k,
+      };
+    });
+  };
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    setDragging(true);
+    dragFrom.current = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = dragFrom.current;
+    if (!dragging || !d) return;
+    setView((v) => ({ ...v, x: d.vx + (e.clientX - d.x), y: d.vy + (e.clientY - d.y) }));
+  };
+  const endDrag = () => {
+    setDragging(false);
+    dragFrom.current = null;
+  };
+
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
+  const active = frame.active;
+
+  return (
+    <div
+      ref={wrapRef}
+      onWheel={onWheel}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onPointerLeave={endDrag}
+      style={{
+        position: "absolute",
+        inset: 0,
+        overflow: "hidden",
+        cursor: dragging ? "grabbing" : "grab",
+        touchAction: "none",
+      }}
+    >
+      <svg width="100%" height="100%" style={{ display: "block" }}>
+        <defs>
+          <filter id="tg-glow" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="3.2" result="b" />
+            <feComposite in="SourceGraphic" in2="b" operator="over" />
+          </filter>
+          <marker
+            id="tg-arrow"
+            markerWidth="7"
+            markerHeight="7"
+            refX="6.4"
+            refY="3"
+            orient="auto"
+          >
+            <path d="M0 0 L7 3 L0 6 z" fill="oklch(0.83 0.14 205 / 55%)" />
+          </marker>
+          <marker
+            id="tg-arrow-live"
+            markerWidth="8"
+            markerHeight="8"
+            refX="7"
+            refY="3.2"
+            orient="auto"
+          >
+            <path d="M0 0 L8 3.2 L0 6.4 z" fill="oklch(0.9 0.17 95)" />
+          </marker>
+        </defs>
+
+        <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
+          {/* ── Edges ──────────────────────────────────────────────────── */}
+          {edges.map((edge) => {
+            const a = nodeById.get(edge.from);
+            const b = nodeById.get(edge.to);
+            if (!a || !b) return null;
+            const drawn = frame.revealedEdges.has(edge.id);
+            const isActive = active?.step.edgeId === edge.id;
+            if (!drawn && !isActive) return null;
+
+            const isSelected = selectedId === edge.id;
+            const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+            // The active edge draws itself from source to destination as the
+            // transfer travels, rather than appearing all at once.
+            const shown = isActive ? len * (active?.t ?? 0) : len;
+
+            return (
+              <line
+                key={edge.id}
+                x1={a.x}
+                y1={a.y}
+                x2={b.x}
+                y2={b.y}
+                stroke={
+                  isSelected
+                    ? "var(--color-accent)"
+                    : isActive
+                      ? "oklch(0.9 0.17 95)"
+                      : "oklch(0.83 0.14 205 / 32%)"
+                }
+                strokeWidth={isSelected ? 2.4 : isActive ? 2 : 1.4}
+                strokeDasharray={`${shown} ${len}`}
+                markerEnd={
+                  isActive
+                    ? undefined
+                    : isSelected
+                      ? "url(#tg-arrow-live)"
+                      : "url(#tg-arrow)"
+                }
+                style={{ cursor: "pointer" }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectEdge(edge.id);
+                }}
+              />
+            );
+          })}
+
+          {/* ── The transfer in flight ─────────────────────────────────── */}
+          {/* One particle, on one real edge, carrying that transaction's real
+              amount. Not a field of decorative dots: this is transfer
+              `stepIndex + 1` of `stepCount` in the trace. */}
+          {active &&
+            (() => {
+              const a = nodeById.get(active.step.fromId);
+              const b = nodeById.get(active.step.toId);
+              if (!a || !b) return null;
+              const t = active.t;
+              const px = a.x + (b.x - a.x) * t;
+              const py = a.y + (b.y - a.y) * t;
+              return (
+                <g pointerEvents="none">
+                  <circle cx={px} cy={py} r={7} fill="oklch(0.9 0.17 95 / 22%)" />
+                  <circle
+                    cx={px}
+                    cy={py}
+                    r={3.6}
+                    fill="oklch(0.95 0.16 95)"
+                    filter="url(#tg-glow)"
+                  />
+                  <text
+                    x={px}
+                    y={py - 13}
+                    textAnchor="middle"
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 9.5,
+                      fontWeight: 600,
+                      fill: "oklch(0.95 0.16 95)",
+                    }}
+                  >
+                    {active.step.amount}
+                  </text>
+                </g>
+              );
+            })()}
+
+          {/* ── Nodes ──────────────────────────────────────────────────── */}
+          {nodes.map((node) => {
+            const revealed = frame.revealedNodes.has(node.id);
+            if (!revealed) return null;
+
+            const isSelected = selectedId === node.id;
+            const isArriving = frame.arriving.has(node.id);
+            const critical = node.terminalKind
+              ? CRITICAL_TERMINALS.has(node.terminalKind)
+              : false;
+            const payoff = node.terminalKind
+              ? PAYOFF_TERMINALS.has(node.terminalKind)
+              : false;
+            const color = critical
+              ? "oklch(0.64 0.22 18)"
+              : payoff
+                ? "oklch(0.79 0.15 74)"
+                : NODE_COLOR[node.type];
+            const r = node.hop === 0 ? 21 : payoff || critical ? 19 : 16;
+
+            return (
+              <g
+                key={node.id}
+                transform={`translate(${node.x},${node.y})`}
+                style={{ cursor: "pointer" }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectNode(node.id);
+                }}
+              >
+                {/* Arrival pulse — funds have just landed here. Driven by the
+                    timeline, so it marks a real transaction, not a loop. */}
+                {isArriving && (
+                  <circle r={r + 10} fill="none" stroke={color} strokeWidth={1} opacity={0.35}>
+                    <animate
+                      attributeName="r"
+                      from={r}
+                      to={r + 16}
+                      dur="1.1s"
+                      repeatCount="indefinite"
+                    />
+                    <animate
+                      attributeName="opacity"
+                      from="0.5"
+                      to="0"
+                      dur="1.1s"
+                      repeatCount="indefinite"
+                    />
+                  </circle>
+                )}
+                {isSelected && (
+                  <circle
+                    r={r + 8}
+                    fill="none"
+                    stroke="var(--color-accent)"
+                    strokeWidth={1.5}
+                    opacity={0.6}
+                  />
+                )}
+                <circle
+                  r={r}
+                  fill={color.replace(")", " / 14%)")}
+                  stroke={color}
+                  strokeWidth={node.hop === 0 ? 2 : 1.5}
+                  filter={isSelected || isArriving ? "url(#tg-glow)" : undefined}
+                />
+                <text
+                  y={4.5}
+                  textAnchor="middle"
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    fill: color,
+                    pointerEvents: "none",
+                  }}
+                >
+                  {nodeGlyph(node)}
+                </text>
+                <text
+                  y={r + 14}
+                  textAnchor="middle"
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 8.5,
+                    fill: "var(--color-foreground)",
+                    letterSpacing: "0.04em",
+                    pointerEvents: "none",
+                  }}
+                >
+                  {node.label}
+                </text>
+                <text
+                  y={r + 25}
+                  textAnchor="middle"
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 7.5,
+                    fill: "var(--color-muted-foreground)",
+                    pointerEvents: "none",
+                  }}
+                >
+                  {node.address}
+                </text>
+              </g>
+            );
+          })}
+        </g>
+      </svg>
+
+      {/* Zoom affordances — a graph you cannot navigate is a graph that hides
+          data, which is the failure mode this component exists to fix. */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 10,
+          right: 10,
+          display: "flex",
+          gap: 4,
+        }}
+      >
+        {[
+          { label: "−", act: () => setView((v) => ({ ...v, k: Math.max(0.2, v.k / 1.25) })) },
+          { label: "Fit", act: fit },
+          { label: "+", act: () => setView((v) => ({ ...v, k: Math.min(4, v.k * 1.25) })) },
+        ].map((b) => (
+          <button
+            key={b.label}
+            onClick={b.act}
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.62rem",
+              padding: "0.2rem 0.5rem",
+              background: "var(--bg-2)",
+              border: "1px solid var(--border-strong)",
+              borderRadius: 2,
+              color: "var(--color-muted-foreground)",
+              cursor: "pointer",
+            }}
+          >
+            {b.label}
+          </button>
+        ))}
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          bottom: 12,
+          left: 12,
+          fontFamily: "var(--font-mono)",
+          fontSize: "0.56rem",
+          color: "var(--color-muted-foreground)",
+          opacity: 0.75,
+          pointerEvents: "none",
+        }}
+      >
+        drag to pan · scroll to zoom · {Math.round(view.k * 100)}%
+      </div>
+    </div>
+  );
+}

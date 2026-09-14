@@ -40,6 +40,18 @@ _SEED_PATH = Path(__file__).resolve().parent.parent / "data" / "sanctions_seed.j
 SANCTIONED_REGISTRY_TTL = 90 * 24 * 3600  # 90 days; re-seeded at every startup
 OVERRIDE_EVIDENCE_FEATURE = "sanctions_interception"
 
+# A confirmed OFAC match is treated as a score FLOOR, not a fixed literal. A
+# flat 1.0 on every sanctioned address made the number look unearned — every
+# hit read identically regardless of the wallet's actual on-chain behavior,
+# and a UI showing a bare "100" next to five real SHAP factors that clearly
+# don't sum to it read as broken. risk_service.evaluate_wallet_risk still
+# runs the full ML pipeline for a sanctioned address and takes
+# max(ml_score, SANCTIONS_SCORE_FLOOR): the sanctions signal guarantees
+# critical-tier severity without discarding the behavioral computation. Only
+# when the ML pipeline itself cannot run (explorer outage, missing model
+# artifacts) does the response fall back to this floor value alone.
+SANCTIONS_SCORE_FLOOR = 0.95
+
 _seed: Optional[dict[str, Any]] = None
 _lookup: dict[tuple[str, str], dict[str, Any]] = {}
 
@@ -108,16 +120,21 @@ async def lookup_registry_designation(
     }
 
 
-def build_sanctions_override_response(sanction: dict[str, Any]) -> RiskResponse:
-    """Construct the hard-block RiskResponse for a sanctioned address.
-
-    risk_tier=critical, risk_score=1.0, risk_source=sanctions_override — regardless
-    of what the ML model would output.  Evidence credits the interception with the
-    designation / sanctions-list detail.
-    """
+def sanctions_evidence(sanction: dict[str, Any]) -> RiskEvidence:
+    """The single evidence item credited to an OFAC match, for either path
+    (pure fallback or blended with real SHAP factors)."""
     detail = " · ".join(
         part for part in (sanction.get("designation"), sanction.get("ofac_list"), ", ".join(sanction.get("programs", [])) if sanction.get("programs") else "") if part
     )
+    return RiskEvidence(
+        feature_name=OVERRIDE_EVIDENCE_FEATURE,
+        contribution=SANCTIONS_SCORE_FLOOR,
+        direction=EvidenceDirection.increases_risk,
+        detail=detail,
+    )
+
+
+def log_sanctions_interception(sanction: dict[str, Any]) -> None:
     logger.info(
         "sanctions_interception",
         extra={
@@ -127,26 +144,38 @@ def build_sanctions_override_response(sanction: dict[str, Any]) -> RiskResponse:
             "list": sanction.get("ofac_list"),
         },
     )
+
+
+def build_sanctions_override_response(sanction: dict[str, Any]) -> RiskResponse:
+    """Construct the sanctions-ONLY RiskResponse, used when a sanctioned
+    address's ML pipeline cannot run at all (explorer outage, missing model
+    artifacts) and there is no behavioral score to blend with.
+
+    risk_tier=critical, risk_score=SANCTIONS_SCORE_FLOOR, risk_source=sanctions_override.
+    The normal path (risk_service.evaluate_wallet_risk) does NOT call this —
+    it blends the sanctions floor with a real computed ML score instead.
+    """
+    log_sanctions_interception(sanction)
     return RiskResponse(
-        risk_score=1.0,
+        risk_score=SANCTIONS_SCORE_FLOOR,
         risk_tier=RiskTier.critical,
         risk_source="sanctions_override",
-        evidence=[
-            RiskEvidence(
-                feature_name=OVERRIDE_EVIDENCE_FEATURE,
-                contribution=1.0,
-                direction=EvidenceDirection.increases_risk,
-                detail=detail,
-            )
-        ],
+        evidence=[sanctions_evidence(sanction)],
     )
 
 
 async def seed_redis(redis_client: Optional[Redis] = None) -> int:
     """Write every curated sanctioned address into the Redis risk registry.
 
-    Each entry: score=1.0, tier=critical, source=ofac_sdn, designation metadata.
-    Persisted with a long TTL so /check-wallet hot paths hard-block the address.
+    Each entry: score=SANCTIONS_SCORE_FLOOR, tier=critical, source=ofac_sdn,
+    designation metadata. Persisted with a long TTL so /check-wallet hot
+    paths hard-block the address immediately at startup, before any live
+    /risk call has had a chance to run the ML pipeline and write through its
+    own (blended, >= floor) score. Uses the SAME floor constant as
+    build_sanctions_override_response and the blend in risk_service.py —
+    this used to hardcode a separate literal 1.0, so an address could show
+    1.0 here and then, the moment someone actually traced it, "drop" to
+    0.95+ with no explanation. One constant, one number, everywhere.
     """
     client = redis_client if redis_client is not None else registry_service.get_redis_client()
     seed = _load_seed()
@@ -163,7 +192,7 @@ async def seed_redis(redis_client: Optional[Redis] = None) -> int:
                 redis_client=client,
                 chain=addr["chain"],
                 address=addr["address"],
-                score=1.0,
+                score=SANCTIONS_SCORE_FLOOR,
                 tier=RiskTier.critical,
                 case_ref=None,
                 ttl=SANCTIONED_REGISTRY_TTL,

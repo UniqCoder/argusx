@@ -120,6 +120,18 @@ TABULAR_REL_COLUMNS: list[str] = FEATURE_COLUMNS + RELATIVE_FEATURE_COLUMNS
 # + 4 entity-scale-relative features (the validated 92f promoted config).
 MODEL_FEATURE_COLUMNS: list[str] = FEATURE_COLUMNS + GSAGE_EMBEDDING_COLUMNS + RELATIVE_FEATURE_COLUMNS
 
+# Content-addressed, not a manually-bumped string: changes if and only if the
+# column list or its ORDER actually changes (a schema regression that
+# `assert_model_feature_schema` below already guards against structurally —
+# this is the same fact expressed as a short, loggable/traceable string for
+# RiskResponse.feature_schema_version, so a score can be tied back to the
+# exact schema it was computed against).
+import hashlib as _hashlib  # noqa: E402  (local import keeps this co-located with the columns it hashes)
+
+FEATURE_SCHEMA_VERSION: str = _hashlib.sha256(
+    "|".join(MODEL_FEATURE_COLUMNS).encode()
+).hexdigest()[:12]
+
 
 def assert_model_feature_schema(computed_columns: list[str]) -> None:
     """

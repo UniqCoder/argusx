@@ -112,3 +112,68 @@ async def test_list_complaints_with_filtering(client: AsyncClient, auth_headers:
     data_typ = resp_typ.json()
     assert data_typ["total"] == 1
     assert data_typ["items"][0]["fraud_typology"] == "sextortion"
+
+
+@pytest.mark.asyncio
+async def test_create_complaint_with_wallets_enables_correlation(
+    client: AsyncClient, auth_headers: dict
+):
+    """
+    The real regression this closes: before ComplaintCreate.wallets existed,
+    POST /api/v1/complaints wrote only the complaint row, so
+    complaint_wallets -- the only table POST /api/v1/correlate reads -- had no
+    writer outside a synthetic seed script. Two complaints naming the same
+    wallet here must produce a correlate hit with correlation_score > 0.
+    """
+    address = "0xTESTCORR00000000000000000000000000001"
+    shared_wallet = {"address": address, "chain": "ETH"}
+
+    for ref in ("NCRP-2026-CORR01", "NCRP-2026-CORR02"):
+        payload = {
+            "ncrp_ref": ref,
+            "source_platform": "ncrp",
+            "narrative_text": "Task-based job fraud.",
+            "fraud_typology": "task_fraud",
+            "amount_lost": 50000.0,
+            "filed_at": datetime.now(timezone.utc).isoformat(),
+            "state": "Delhi",
+            "district": "New Delhi",
+            "wallets": [shared_wallet],
+        }
+        response = await client.post("/api/v1/complaints", json=payload, headers=auth_headers)
+        assert response.status_code == 201, response.text
+
+    correlate_response = await client.post(
+        "/api/v1/correlate",
+        json={"address": address, "chain": "ETH"},
+        headers=auth_headers,
+    )
+    assert correlate_response.status_code == 200, correlate_response.text
+    data = correlate_response.json()
+    assert len(data["linked_complaints"]) == 2
+    assert data["correlation_score"] > 0.0
+
+
+@pytest.mark.asyncio
+async def test_correlate_matches_address_case_insensitively(
+    client: AsyncClient, auth_headers: dict
+):
+    """EVM addresses are case-insensitive on-chain; a checksummed paste and a
+    lowercase paste of the same wallet must correlate as one wallet, not two."""
+    mixed_case = "0xAbCdEf0000000000000000000000000000CAFE"
+    payload = {
+        "ncrp_ref": "NCRP-2026-CASE01",
+        "source_platform": "ncrp",
+        "filed_at": datetime.now(timezone.utc).isoformat(),
+        "wallets": [{"address": mixed_case, "chain": "ETH"}],
+    }
+    response = await client.post("/api/v1/complaints", json=payload, headers=auth_headers)
+    assert response.status_code == 201, response.text
+
+    correlate_response = await client.post(
+        "/api/v1/correlate",
+        json={"address": mixed_case.lower(), "chain": "ETH"},
+        headers=auth_headers,
+    )
+    assert correlate_response.status_code == 200, correlate_response.text
+    assert len(correlate_response.json()["linked_complaints"]) == 1

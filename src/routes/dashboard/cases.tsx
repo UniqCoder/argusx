@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import type { CaseStatus } from "@/lib/mock-data";
 import { useCases } from "@/hooks/use-cases";
+import { formatRiskScore, riskTierColor } from "@/hooks/use-wallet";
 import { useCaseContext } from "@/store/case-context-store";
 import { truncateAddress } from "@/lib/address";
 
@@ -43,13 +44,29 @@ const SIGNAL_BADGE: Record<string, string> = {
   NONE: "ug-badge--closed",
 };
 
-function RiskBar({ value }: { value: number }) {
-  const color =
-    value > 80
-      ? "var(--color-signal)"
-      : value > 55
-        ? "var(--color-primary)"
-        : "var(--color-accent)";
+function RiskBar({ value, tier }: { value: number | null; tier: string | null }) {
+  // A wallet that was never scored (no risk model artifact, or no wallet
+  // linked to the case yet) used to render as an empty bar and a bare "0" —
+  // indistinguishable from a wallet that WAS scored and came back clean.
+  // Never fabricate a score to fill this space.
+  if (value === null) {
+    return (
+      <span
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: "0.64rem",
+          color: "var(--color-muted-foreground)",
+        }}
+      >
+        Not scored
+      </span>
+    );
+  }
+  // Color comes from the backend's own tier, not a second set of
+  // score-threshold breakpoints (this used to be value>80/>55, which don't
+  // line up with the backend's 0.85/0.60/0.30 tier boundaries — the same
+  // case could show a color here that disagreed with its own risk_tier).
+  const color = riskTierColor(tier);
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
       <div className="ug-risk-bar" style={{ width: 52 }}>
@@ -67,7 +84,7 @@ function RiskBar({ value }: { value: number }) {
           fontWeight: 700,
         }}
       >
-        {value}
+        {formatRiskScore(value)}
       </span>
     </div>
   );
@@ -182,7 +199,7 @@ function Cases() {
                 caseNumber: c.id,
                 wallet: c.reportedWallet,
                 chain: c.blockchain as
-                  "BTC" | "ETH" | "TRON" | "BSC" | "Polygon",
+                  "BTC" | "ETH" | "TRON" | "BSC" | "POLYGON",
                 fraudType: c.fraudType,
                 status: c.traceStatus,
               });
@@ -249,7 +266,7 @@ function Cases() {
             </span>
 
             {/* Risk bar */}
-            <RiskBar value={c.riskScore} />
+            <RiskBar value={c.riskScore} tier={c.riskTier} />
 
             {/* Activity */}
             <span

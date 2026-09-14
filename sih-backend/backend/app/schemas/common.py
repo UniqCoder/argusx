@@ -40,6 +40,12 @@ class Chain(str, Enum):
     ETH = "ETH"
     TRON = "TRON"
     BSC = "BSC"
+    # POLYGON was added for cross-chain continuation: a bridge used to be a hard
+    # terminal, so an ETH -> Polygon PoS -> exchange trail could not be drawn as
+    # one graph. There is no Polygon *explorer* — the chain is walkable only
+    # where a source provides its transactions (see app/services/scenarios/).
+    # Live Polygon addresses still terminate as DEPTH_LIMIT, honestly.
+    POLYGON = "POLYGON"
 
 
 class SourcePlatform(str, Enum):

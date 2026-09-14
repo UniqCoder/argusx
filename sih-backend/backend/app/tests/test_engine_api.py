@@ -104,7 +104,10 @@ async def test_get_trace_with_non_vasp_terminal(client: AsyncClient, auth_header
     never fired. This anchor has zero outgoing transactions, so its only node is a
     non-VASP terminal, forcing the sum to actually iterate and touch the field.
     """
-    zero_activity_addr = "bc1qzeroactivitywallettestcase0000000000"
+    # Shape-valid bech32 dummy (BIP-173 data charset only — no valid checksum,
+    # which the API's shape-only validation doesn't verify; this trace has zero
+    # outgoing txs, which is what the regression test below exercises).
+    zero_activity_addr = "bc1qqyzery9x8gf2tvdw0s3jn54khce6mua7l00000"
     anchor_resp = await client.post(
         "/api/v1/anchors",
         headers=auth_headers,
@@ -131,7 +134,87 @@ async def test_get_trace_with_non_vasp_terminal(client: AsyncClient, auth_header
     assert get_resp.status_code == 200
     body = get_resp.json()
     assert body["reproducible_hash"] == trace["reproducible_hash"]
-    assert float(body["unattributed_residual"]) == pytest.approx(1.0)
+
+    # This assertion used to be `unattributed_residual == 1.0`, which only held
+    # because the taint seed was hardcoded to 1.0 native unit at the router.
+    # That meant this trace claimed "1.0 BTC is unattributed" for an address
+    # with no transactions at all — a number nothing on-chain supported. The
+    # seed is now derived from the anchor's real observed inflow, so an address
+    # with zero activity correctly yields a zero seed and zero residual.
+    assert body["seed_basis"] == "observed_inflow"
+    assert float(body["seed_value"]) == pytest.approx(0.0)
+    assert float(body["unattributed_residual"]) == pytest.approx(0.0)
+
+    # The trace must also state how far it got and why it stopped, rather than
+    # leaving the caller to infer success from the mere fact it returned.
+    assert body["depth_reached"] == 0
+    assert body["termination_reason"] in (
+        "frontier_exhausted", "node_budget", "all_branches_dust",
+    )
+
+
+@pytest.mark.asyncio
+async def test_explicit_seed_value_is_used_and_reported(client: AsyncClient, auth_headers: dict):
+    """
+    When the complaint states a real stolen amount, the engine must propagate
+    that amount and say so — instead of the fixed 1.0 placeholder it used to
+    assume for every trace regardless of the complaint.
+    """
+    anchor_resp = await client.post(
+        "/api/v1/anchors",
+        headers=auth_headers,
+        json={
+            "address": ANCHOR_ADDR, "chain": "BTC", "attestation_class": "A",
+            "attestation_type": "LEGAL_COMPLAINT", "source_ref": "NCRP-2026-SEEDED",
+            "asserted_by": "victim-uuid-3", "victim_amount_inr": 250000,
+        },
+    )
+    assert anchor_resp.status_code == 201
+    anchor = anchor_resp.json()
+
+    trace_resp = await client.post(
+        "/api/v1/engine/trace",
+        headers=auth_headers,
+        json={
+            "anchor_id": anchor["id"], "method": "haircut",
+            "max_hops": 3, "max_nodes": 10, "seed_value": "0.75",
+        },
+    )
+    assert trace_resp.status_code == 201
+    body = trace_resp.json()
+    assert body["seed_basis"] == "reported_amount"
+    assert float(body["seed_value"]) == pytest.approx(0.75)
+
+
+@pytest.mark.asyncio
+async def test_max_nodes_is_a_hard_cap(client: AsyncClient, auth_headers: dict):
+    """
+    max_nodes must cap the returned node count. It used to overshoot, because
+    up to 10 "unresolved branch" markers were appended AFTER the budget check
+    rather than reserved out of it — a requested 40 came back as 48.
+    """
+    anchor_resp = await client.post(
+        "/api/v1/anchors",
+        headers=auth_headers,
+        json={
+            "address": ANCHOR_ADDR, "chain": "BTC", "attestation_class": "A",
+            "attestation_type": "LEGAL_COMPLAINT", "source_ref": "NCRP-2026-CAP",
+            "asserted_by": "victim-uuid-4",
+        },
+    )
+    assert anchor_resp.status_code == 201
+    anchor = anchor_resp.json()
+
+    requested = 5
+    trace_resp = await client.post(
+        "/api/v1/engine/trace",
+        headers=auth_headers,
+        json={"anchor_id": anchor["id"], "max_hops": 8, "max_nodes": requested},
+    )
+    assert trace_resp.status_code == 201
+    body = trace_resp.json()
+    assert body["node_count"] <= requested
+    assert len(body["nodes"]) <= requested
 
 
 @pytest.mark.asyncio

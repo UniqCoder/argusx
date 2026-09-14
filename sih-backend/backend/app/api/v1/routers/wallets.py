@@ -13,7 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import CurrentUserDep, InvestigatorOrAdminDep
 from app.db.session import get_db
-from app.schemas.check_wallet import CheckWalletRequest, CheckWalletResponse
+from app.schemas.check_wallet import (
+    CheckWalletRequest,
+    CheckWalletResponse,
+    DepositDecisionRequest,
+    DepositDecisionResponse,
+)
 from app.schemas.common import Chain, ErrorEnvelope
 from app.schemas.wallet import RiskResponse, TraceResponse
 from app.services import registry_service, risk_service, tracing_service
@@ -121,10 +126,58 @@ async def deposit_check(
         )
 
     redis_client = registry_service.get_redis_client()
-    score, action, case_ref = await registry_service.check_wallet_hot_path(
+    score, action, case_ref, reason, tier = await registry_service.check_wallet_hot_path(
         redis_client=redis_client,
         chain=body.chain.value,
         address=body.address,
         amount=body.amount,
     )
-    return CheckWalletResponse(risk_score=score, action=action, case_ref=case_ref)
+    return CheckWalletResponse(
+        risk_score=score, action=action, case_ref=case_ref, reason=reason, risk_tier=tier
+    )
+
+
+@router.post(
+    "/deposit-decision",
+    response_model=DepositDecisionResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={401: {"model": ErrorEnvelope}, 403: {"model": ErrorEnvelope}},
+    summary="Record what an investigator did with a Deposit Watch verdict",
+)
+async def record_deposit_decision(
+    body: DepositDecisionRequest,
+    current_user: InvestigatorOrAdminDep,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> DepositDecisionResponse:
+    """
+    A compliance override used to leave no trace anywhere: "Override / Allow"
+    and "Allow Transaction" only flipped local component state. This appends
+    an entry to the same tamper-evident evidence ledger a trace decision
+    writes to, so an allow on a held/blocked wallet is an auditable act with
+    an actor and a timestamp, not a silent client-side click.
+    """
+    from app.engine import ledger as ledger_engine
+
+    await ledger_engine.append_entry(
+        db,
+        event_type="deposit_decision",
+        payload={
+            "address": body.address,
+            "chain": body.chain.value,
+            "risk_score": body.risk_score,
+            "registry_action": body.action.value,
+            "decision": body.decision,
+            "case_ref": body.case_ref,
+            "note": body.note,
+        },
+        actor=current_user.sub,
+        # Real case linkage, when the investigator had an active case — not
+        # the opaque `case_ref` label, which isn't guaranteed to be a case
+        # in this database. Without this, every flagged/allowed deposit was
+        # written to the ledger but permanently invisible in any case's
+        # Evidence Trail (which is filtered by case_id), even though the
+        # write itself succeeded — "recorded to the evidence ledger" was
+        # true but unverifiable by the investigator.
+        case_id=body.case_id,
+    )
+    return DepositDecisionResponse(recorded=True)

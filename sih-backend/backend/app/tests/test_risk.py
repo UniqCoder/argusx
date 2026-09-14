@@ -283,30 +283,55 @@ def test_sanctions_seed_lookup_contract():
 
 
 @pytest.mark.asyncio
-async def test_sanctions_override_hard_blocks_before_ml(monkeypatch, client: AsyncClient, auth_headers: dict):
-    """A curated sanctioned address is critical / score 1.0 even if ML blows up.
+async def test_sanctions_override_falls_back_cleanly_if_ml_fails(
+    monkeypatch, client: AsyncClient, auth_headers: dict
+):
+    """A curated sanctioned address stays critical even if ML inference blows up.
 
-    The interception must run before model inference: if the model path is ever
-    reached for a sanctioned address, this test fails loudly.
+    Sanctions are looked up first but no longer short-circuit the ML pipeline
+    (a flat score=1.0 on every match discarded real computed behavior — see
+    test_sanctions_blends_with_real_ml_score below for the normal path). If
+    ML inference itself fails, the response degrades to the sanctions-only
+    floor rather than 500ing or losing the sanctions signal.
     """
     from app.services import risk_service as risk_service_module
 
-    def _ml_must_not_run(*args, **kwargs):
-        raise AssertionError("ML inference must not run for a sanctioned address")
+    def _ml_blows_up(*args, **kwargs):
+        raise RuntimeError("simulated model failure")
 
-    monkeypatch.setattr(risk_service_module, "predict_risk_score", _ml_must_not_run)
+    monkeypatch.setattr(risk_service_module, "predict_risk_score", _ml_blows_up)
 
     addr = "3Lpoy53K625zVeE47ZasiG5jGkAxJ27kh1"
     resp = await client.get(f"/api/v1/wallets/{addr}/risk?chain=BTC", headers=auth_headers)
     assert resp.status_code == 200
     data = resp.json()
-    assert data["risk_score"] == 1.0
+    assert data["risk_score"] == sanctions_service.SANCTIONS_SCORE_FLOOR
     assert data["risk_tier"] == RiskTier.critical.value
     assert data["risk_source"] == "sanctions_override"
     ev = data["evidence"][0]
     assert ev["feature_name"] == "sanctions_interception"
     assert "Garantex Europe OU" in ev["detail"]
     assert "SDN" in ev["detail"]
+
+
+@pytest.mark.asyncio
+async def test_sanctions_blends_with_real_ml_score(client: AsyncClient, auth_headers: dict):
+    """The normal path: ML still runs for a sanctioned address, and the final
+    score is max(ml_score, floor) — real behavioral evidence blended with the
+    sanctions floor, not a bare hardcoded 1.0 with no computation behind it.
+    """
+    addr = "3Lpoy53K625zVeE47ZasiG5jGkAxJ27kh1"
+    resp = await client.get(f"/api/v1/wallets/{addr}/risk?chain=BTC", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["risk_score"] >= sanctions_service.SANCTIONS_SCORE_FLOOR
+    assert data["risk_tier"] == RiskTier.critical.value
+    assert data["risk_source"] == "sanctions_blended"
+    feature_names = [e["feature_name"] for e in data["evidence"]]
+    assert "sanctions_interception" in feature_names
+    # Real ML factors are still present alongside the sanctions evidence —
+    # the point of blending instead of overriding.
+    assert len(feature_names) > 1
 
 
 @pytest.mark.asyncio
@@ -327,4 +352,222 @@ async def test_sanctions_check_wallet_hot_path_blocks_seeded(
     assert resp.status_code == 200
     data = resp.json()
     assert data["action"] == "block"
-    assert data["risk_score"] == 1.0
+    assert data["risk_score"] == sanctions_service.SANCTIONS_SCORE_FLOOR
+
+
+# ── Determinism & cross-endpoint consistency (risk-score pipeline audit) ────
+#
+# Every test below drives the REAL feature-extraction -> model -> SHAP
+# pipeline (evaluate_wallet_risk itself is never mocked) but replaces the
+# three network-dependent inputs — the block explorer, live Neo4j graph
+# features, and the embedding store — with fixed, in-memory values. That
+# isolates "does this pipeline behave deterministically" from "is Etherscan
+# reachable right now", which is a real and separate question these tests
+# are not trying to answer.
+
+DETERMINISTIC_WALLET = "1DeterministicWallet"
+
+
+def _fixed_btc_txs() -> list[RawTx]:
+    ts = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    return [
+        RawTx(tx_hash="detTx1", from_address="1SenderAAA", to_address=DETERMINISTIC_WALLET,
+              amount=0.5, chain="BTC", timestamp=ts, asset="BTC"),
+        RawTx(tx_hash="detTx2", from_address=DETERMINISTIC_WALLET, to_address="1ReceiverBBB",
+              amount=0.3, chain="BTC", timestamp=ts, asset="BTC"),
+    ]
+
+
+async def _fake_graph_features(address, chain, timeout_seconds=2.0):
+    return {}, "empty"
+
+
+async def _fake_embeddings(address, chain, timeout_seconds=2.0):
+    return np.zeros(len(GSAGE_EMBEDDING_COLUMNS), dtype=np.float32), "fallback"
+
+
+def _patch_deterministic_pipeline(monkeypatch, txs: list[RawTx] | None = None):
+    """Isolate evaluate_wallet_risk from live explorers/Neo4j/embeddings so
+    a test exercises the real scoring pipeline deterministically, with no
+    network dependency. Patches the SOURCE modules risk_service.py imports
+    from at call time (`from X import Y` inside the function body re-reads
+    the current attribute on X every call), not risk_service's own module.
+    """
+    import app.ml.embedding_store as embedding_store_module
+    import app.ml.live_graph_features as live_graph_features_module
+    from app.services import risk_service as risk_service_module
+
+    txs = txs if txs is not None else _fixed_btc_txs()
+
+    async def _fake_get_transactions(address, limit=25):
+        return list(txs)
+
+    monkeypatch.setattr(risk_service_module.btc_explorer, "get_transactions", _fake_get_transactions)
+    monkeypatch.setattr(
+        live_graph_features_module, "compute_live_graph_features_with_fallback", _fake_graph_features
+    )
+    monkeypatch.setattr(embedding_store_module, "get_live_embeddings", _fake_embeddings)
+
+
+@pytest.mark.asyncio
+async def test_same_snapshot_same_score_repeated_runs(monkeypatch, db_session):
+    """Same wallet + same evidence snapshot = exactly the same result, run
+    after run after run — score, tier, snapshot_id, model/schema version,
+    and the SHAP evidence list itself, all byte-identical."""
+    from app.schemas.common import Chain
+    from app.services.risk_service import evaluate_wallet_risk
+
+    _patch_deterministic_pipeline(monkeypatch)
+
+    r1 = await evaluate_wallet_risk(db_session, DETERMINISTIC_WALLET, Chain.BTC)
+    r2 = await evaluate_wallet_risk(db_session, DETERMINISTIC_WALLET, Chain.BTC)
+    r3 = await evaluate_wallet_risk(db_session, DETERMINISTIC_WALLET, Chain.BTC)
+
+    assert r1.risk_score == r2.risk_score == r3.risk_score
+    assert r1.risk_tier == r2.risk_tier == r3.risk_tier
+    assert r1.snapshot_id == r2.snapshot_id == r3.snapshot_id
+    assert r1.model_version == r2.model_version == r3.model_version
+    assert r1.feature_schema_version == r2.feature_schema_version == r3.feature_schema_version
+    assert [(e.feature_name, e.contribution, e.direction) for e in r1.evidence] == \
+           [(e.feature_name, e.contribution, e.direction) for e in r2.evidence]
+
+
+@pytest.mark.asyncio
+async def test_same_wallet_identical_across_risk_and_deposit_watch_endpoints(
+    monkeypatch, client: AsyncClient, fake_redis, auth_headers: dict, vasp_api_headers: dict,
+):
+    """The SAME wallet returns the EXACT same score from GET /risk (Risk
+    Intelligence / Investigation / Cases / Reports all read this) and from
+    POST /check-wallet (Deposit Watch's hot path) — because the hot path
+    reads the registry entry risk_service.py's write-through just wrote,
+    not a second, independent computation."""
+    from app.services import registry_service as registry_service_module
+
+    _patch_deterministic_pipeline(monkeypatch)
+    # /check-wallet's Redis dependency is overridden to `fake_redis` by the
+    # `client` fixture; route risk_service's write-through through the same
+    # store so this test proves the real wiring, not two separate Redises.
+    monkeypatch.setattr(registry_service_module, "get_redis_client", lambda: fake_redis)
+
+    resp = await client.get(
+        f"/api/v1/wallets/{DETERMINISTIC_WALLET}/risk?chain=BTC", headers=auth_headers
+    )
+    assert resp.status_code == 200
+    risk_data = resp.json()
+
+    dw = await client.post(
+        "/check-wallet",
+        json={"chain": "BTC", "address": DETERMINISTIC_WALLET, "amount": 1.0},
+        headers=vasp_api_headers,
+    )
+    assert dw.status_code == 200
+    dw_data = dw.json()
+
+    assert dw_data["risk_score"] == risk_data["risk_score"]
+
+
+@pytest.mark.asyncio
+async def test_different_evidence_produces_different_score(monkeypatch, db_session):
+    """Nothing forces every wallet through the same number: a wallet with
+    starkly different on-chain evidence gets a genuinely different score
+    and a different snapshot_id."""
+    from app.schemas.common import Chain
+    from app.services.risk_service import evaluate_wallet_risk
+
+    _patch_deterministic_pipeline(monkeypatch, txs=_fixed_btc_txs())
+    r_quiet = await evaluate_wallet_risk(db_session, DETERMINISTIC_WALLET, Chain.BTC)
+
+    ts = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    busy_txs = [
+        RawTx(tx_hash=f"busyTx{i}", from_address=f"1Counterparty{i}", to_address="1BusyWallet",
+              amount=50.0 + i, chain="BTC", timestamp=ts, asset="BTC")
+        for i in range(40)
+    ] + [
+        RawTx(tx_hash="busyOut", from_address="1BusyWallet", to_address="1Cashout",
+              amount=1500.0, chain="BTC", timestamp=ts, asset="BTC"),
+    ]
+    _patch_deterministic_pipeline(monkeypatch, txs=busy_txs)
+    r_busy = await evaluate_wallet_risk(db_session, "1BusyWallet", Chain.BTC)
+
+    assert r_quiet.risk_score != r_busy.risk_score
+    assert r_quiet.snapshot_id != r_busy.snapshot_id
+
+
+@pytest.mark.asyncio
+async def test_new_evidence_snapshot_legitimately_changes_result(monkeypatch, db_session):
+    """The SAME wallet address gets a new snapshot_id — and is allowed to
+    get a new score — once its on-chain evidence actually changes. This is
+    the one legitimate way a repeated call for the same address may not
+    match a previous call."""
+    from app.schemas.common import Chain
+    from app.services.risk_service import evaluate_wallet_risk
+
+    addr = "1EvolvingWallet"
+    original_txs = _fixed_btc_txs()
+    _patch_deterministic_pipeline(monkeypatch, txs=original_txs)
+    r_before = await evaluate_wallet_risk(db_session, addr, Chain.BTC)
+
+    new_txs = original_txs + [
+        RawTx(tx_hash="newTx3", from_address="1SenderCCC", to_address=addr,
+              amount=25.0, chain="BTC", timestamp=datetime(2024, 6, 1, tzinfo=timezone.utc), asset="BTC"),
+    ]
+    _patch_deterministic_pipeline(monkeypatch, txs=new_txs)
+    r_after = await evaluate_wallet_risk(db_session, addr, Chain.BTC)
+
+    assert r_before.snapshot_id != r_after.snapshot_id
+
+
+@pytest.mark.asyncio
+async def test_no_artificial_clamping_of_normal_scores(monkeypatch, db_session):
+    """A genuine model probability strictly between 0 and 1 passes through
+    untouched: no min/max clamp nudges it toward a round-looking number, and
+    no floor/bonus applies when there's no sanctions match or complaint
+    corroboration to justify one (this wallet has neither)."""
+    from app.schemas.common import Chain
+    from app.services import risk_service as risk_service_module
+
+    _patch_deterministic_pipeline(monkeypatch)
+    monkeypatch.setattr(risk_service_module, "predict_risk_score", lambda _vec: 0.543210)
+
+    r = await risk_service_module.evaluate_wallet_risk(db_session, DETERMINISTIC_WALLET, Chain.BTC)
+    assert r.risk_score == 0.5432  # rounded to 4dp only — nothing else touches it
+    assert r.risk_tier == RiskTier.medium  # 0.30 <= score < 0.60, per map_score_to_tier
+
+
+@pytest.mark.asyncio
+async def test_shap_evidence_matches_the_scored_inference(monkeypatch, db_session):
+    """SHAP evidence is computed from the exact model_vector that produced
+    the displayed score, not a separately-fetched or re-derived one:
+    re-running with identical evidence reproduces the identical evidence
+    list, proving the two are coupled to one inference rather than able to
+    silently drift apart."""
+    from app.schemas.common import Chain
+    from app.services.risk_service import evaluate_wallet_risk
+
+    _patch_deterministic_pipeline(monkeypatch)
+    r1 = await evaluate_wallet_risk(db_session, DETERMINISTIC_WALLET, Chain.BTC)
+    r2 = await evaluate_wallet_risk(db_session, DETERMINISTIC_WALLET, Chain.BTC)
+
+    assert len(r1.evidence) == len(r2.evidence) > 0
+    for e1, e2 in zip(r1.evidence, r2.evidence):
+        assert e1.feature_name == e2.feature_name
+        assert e1.contribution == e2.contribution
+        assert e1.direction == e2.direction
+
+
+@pytest.mark.asyncio
+async def test_model_and_schema_versions_are_present_and_traceable(monkeypatch, db_session):
+    """Every scored response carries a model_version, feature_schema_version,
+    snapshot_id and calculated_at — enough to confirm two results came from
+    the same computation, or to explain precisely why they legitimately
+    didn't."""
+    from app.schemas.common import Chain
+    from app.services.risk_service import evaluate_wallet_risk
+
+    _patch_deterministic_pipeline(monkeypatch)
+    r = await evaluate_wallet_risk(db_session, DETERMINISTIC_WALLET, Chain.BTC)
+
+    assert r.model_version
+    assert r.feature_schema_version
+    assert r.snapshot_id
+    assert r.calculated_at

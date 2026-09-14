@@ -4,14 +4,17 @@ app/services/explorers/tron_explorer.py — TRON Blockchain Explorer Integration
 Fetches live on-chain TRON / TRC20 transactions via Tronscan REST API.
 API Key is passed securely via 'TRON-PRO-API-KEY' request header from settings.
 """
+from __future__ import annotations
+
+import asyncio
 from datetime import datetime, timezone
 import logging
 from typing import List, Optional
 
-import httpx
 
 from app.core.config import get_settings
 from app.schemas.common import Chain
+from app.services.explorers import http_client
 from app.services.explorers.base import BlockchainExplorer, ExplorerUnavailableError, RawTx
 from app.services.explorers.known_vasps import lookup_known_vasp
 
@@ -19,6 +22,15 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 TRONSCAN_BASE_URL = "https://apilist.tronscanapi.com/api"
+
+# Bounded single retry for TRANSIENT failures only (transport errors /
+# timeouts / 502-504). Never retries 429 (rate-limit — the caller must see
+# the outage) or 400/404 (definitive answers). ~1s backoff keeps the worst
+# case bounded.
+_RETRYABLE_STATUS = {500, 502, 503, 504}
+_RETRY_BACKOFF_SECONDS = 1.0
+# Longer than the transport retry: a 429 means slow down, not try again now.
+_RATE_LIMIT_BACKOFF_SECONDS = 2.0
 
 
 class TronExplorer(BlockchainExplorer):
@@ -43,30 +55,61 @@ class TronExplorer(BlockchainExplorer):
             headers["TRON-PRO-API-KEY"] = self.api_key
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                resp = await client.get(url, headers=headers)
+            resp = await http_client.get(url, headers=headers, timeout=self.timeout)
+            if resp.status_code == 200:
+                return self._parse_tronscan_txs(addr, resp.json().get("data", []), limit)
+            elif resp.status_code == 400:
+                logger.info("tron_invalid_address_or_no_txs", extra={"address": addr})
+                return []
+            elif resp.status_code == 404:
+                logger.info("tron_address_not_found", extra={"address": addr})
+                return []
+            elif resp.status_code == 429:
+                # One paced retry. 429 used to be fatal on the reasoning that
+                # "backing off once is not enough" — but with the client-side
+                # pacer in http_client a 429 is now the exception rather than
+                # the steady state, and giving up immediately turned a
+                # recoverable throttle into an EXPLORER_UNAVAILABLE dead end on
+                # a majority of nodes in a live TRON trace.
+                logger.warning("tron_explorer_rate_limited", extra={"address": addr})
+                await asyncio.sleep(_RATE_LIMIT_BACKOFF_SECONDS)
+                resp = await http_client.get(url, headers=headers, timeout=self.timeout)
                 if resp.status_code == 200:
-                    data = resp.json()
-                    tx_list = data.get("data", [])
-                    return self._parse_tronscan_txs(addr, tx_list, limit)
-                elif resp.status_code == 400:
-                    logger.info("tron_invalid_address_or_no_txs", extra={"address": addr})
+                    return self._parse_tronscan_txs(addr, resp.json().get("data", []), limit)
+                if resp.status_code in (400, 404):
                     return []
-                elif resp.status_code == 404:
-                    logger.info("tron_address_not_found", extra={"address": addr})
+                raise ExplorerUnavailableError(f"TRON explorer rate-limited for {addr}")
+            elif resp.status_code in _RETRYABLE_STATUS:
+                logger.warning(
+                    "tron_explorer_transient",
+                    extra={"status": resp.status_code, "address": addr},
+                )
+                await asyncio.sleep(_RETRY_BACKOFF_SECONDS)
+                resp = await http_client.get(url, headers=headers, timeout=self.timeout)
+                if resp.status_code == 200:
+                    return self._parse_tronscan_txs(addr, resp.json().get("data", []), limit)
+                if resp.status_code in (400, 404):
                     return []
-                elif resp.status_code == 429:
-                    logger.warning("tron_explorer_rate_limited", extra={"address": addr})
-                    raise ExplorerUnavailableError(f"TRON explorer rate-limited for {addr}")
-                else:
-                    logger.warning("tronscan_returned_non_200", extra={"status": resp.status_code, "text": resp.text[:200]})
-                    raise ExplorerUnavailableError(f"TRON explorer returned {resp.status_code} for {addr}")
+                raise ExplorerUnavailableError(f"TRON explorer returned {resp.status_code} for {addr}")
+            else:
+                logger.warning("tronscan_returned_non_200", extra={"status": resp.status_code, "text": resp.text[:200]})
+                raise ExplorerUnavailableError(f"TRON explorer returned {resp.status_code} for {addr}")
         except ExplorerUnavailableError:
             raise
         except Exception as e:
+            # Transport-level failure (timeout / connection reset). One bounded
+            # retry, then surface as an explorer outage.
             logger.warning("tron_explorer_request_failed", extra={"error": str(e), "address": addr})
-
-        raise ExplorerUnavailableError(f"TRON explorer failed for {addr}")
+            try:
+                await asyncio.sleep(_RETRY_BACKOFF_SECONDS)
+                resp = await http_client.get(url, headers=headers, timeout=self.timeout)
+                if resp.status_code == 200:
+                    return self._parse_tronscan_txs(addr, resp.json().get("data", []), limit)
+                if resp.status_code in (400, 404):
+                    return []
+            except Exception:
+                pass
+            raise ExplorerUnavailableError(f"TRON explorer failed for {addr}")
 
     def _parse_tronscan_txs(self, target_address: str, tx_list: list, limit: int) -> List[RawTx]:
         results: List[RawTx] = []
@@ -132,6 +175,23 @@ class TronExplorer(BlockchainExplorer):
                 except (ValueError, TypeError, OverflowError):
                     continue
 
+            # Which asset is this amount actually in? Tronscan puts TRC-20
+            # transfers through the same records as native TRX, so without this
+            # a wallet's USDT and TRX inflows were summed into one meaningless
+            # denominator by the haircut fraction. tokenAbbr/tokenName identify
+            # the token; tokenId is the contract address (TRC-20) or "_" for
+            # native TRX.
+            token_id = str(token_info.get("tokenId") or "").strip()
+            token_abbr = str(
+                token_info.get("tokenAbbr") or token_info.get("tokenName") or ""
+            ).strip()
+            if token_id and token_id != "_" and token_abbr:
+                asset = token_abbr.upper()
+                asset_id = token_id
+            else:
+                asset = "TRX"
+                asset_id = None
+
             # Known VASP attribution
             vasp_from = lookup_known_vasp(from_addr)
             vasp_to = lookup_known_vasp(to_addr)
@@ -149,6 +209,8 @@ class TronExplorer(BlockchainExplorer):
                     amount=amount,
                     chain=Chain.TRON,
                     timestamp=ts,
+                    asset=asset,
+                    asset_id=asset_id,
                     vasp_tag=vasp_name,
                         fee_native=(net_fee_sun + energy_fee_sun) / 1e6 if net_fee_sun or energy_fee_sun else None,
                         bandwidth_used=bandwidth_used if bandwidth_used else None,

@@ -10,9 +10,42 @@ from typing import Optional, Sequence
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.complaint import Complaint
+from app.models.complaint import Complaint, ComplaintWallet
+from app.models.wallet import Wallet
 from app.nlp import llm_ner
 from app.schemas.complaint import ComplaintCreate, ComplaintDetailRead, ExtractedEntities
+
+
+async def _get_or_create_wallet(db: AsyncSession, address: str, chain: str) -> Wallet:
+    result = await db.execute(
+        select(Wallet).where(Wallet.address == address, Wallet.chain == chain)
+    )
+    wallet = result.scalar_one_or_none()
+    if wallet is None:
+        wallet = Wallet(address=address, chain=chain)
+        db.add(wallet)
+        await db.flush()
+    return wallet
+
+
+async def complaint_count_for(db: AsyncSession, address: str, chain: str) -> int:
+    """How many complaints name this exact wallet — the basis for both the
+    engine's PRIMARY_SUSPECT role assignment and the risk service's
+    corroboration bonus (app/services/risk_service.py). Independent victims
+    naming the same address is real, direct evidence, distinct from anything
+    the ML behavioral model can see on its own.
+    """
+    wallet = (
+        await db.execute(
+            select(Wallet).where(Wallet.address == address, Wallet.chain == chain)
+        )
+    ).scalar_one_or_none()
+    if wallet is None:
+        return 0
+    result = await db.execute(
+        select(func.count()).select_from(ComplaintWallet).where(ComplaintWallet.wallet_id == wallet.id)
+    )
+    return int(result.scalar_one())
 
 
 async def create_complaint(
@@ -20,7 +53,13 @@ async def create_complaint(
     complaint_in: ComplaintCreate,
 ) -> Complaint:
     """
-    Ingest a new complaint into PostgreSQL.
+    Ingest a new complaint into PostgreSQL, and link every wallet it names.
+
+    THIS is the write path cross-victim correlation depends on. Before this
+    existed, POST /api/v1/complaints wrote the complaint row and nothing else
+    -- the only writer of complaint_wallets in the entire codebase was
+    scripts/generate_synthetic_ncrp.py, so a real complaint could never be
+    correlated against anything.
     """
     complaint = Complaint(
         id=uuid.uuid4(),
@@ -34,6 +73,20 @@ async def create_complaint(
         district=complaint_in.district,
     )
     db.add(complaint)
+    await db.flush()
+
+    for w in complaint_in.wallets:
+        # Address stored as given; correlation and the taint engine both
+        # normalise case for comparison, so this is not a lookup key mismatch.
+        wallet = await _get_or_create_wallet(db, w.address.strip(), w.chain.value)
+        db.add(
+            ComplaintWallet(
+                complaint_id=complaint.id,
+                wallet_id=wallet.id,
+                reported_at=complaint.filed_at,
+            )
+        )
+
     await db.commit()
     await db.refresh(complaint)
     return complaint

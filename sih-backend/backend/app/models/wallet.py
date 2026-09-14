@@ -25,7 +25,9 @@ class Wallet(Base):
     chain: Mapped[str] = mapped_column(String, nullable=False)  # BTC|ETH|TRON|BSC
     first_seen: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     last_seen: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
-    risk_score: Mapped[float | None] = mapped_column(NUMERIC(4, 3), nullable=True)
+    # 4-decimal precision, matching what risk_service.py actually computes
+    # and returns via the API — see migration 0009_risk_score_precision.
+    risk_score: Mapped[float | None] = mapped_column(NUMERIC(5, 4), nullable=True)
     risk_tier: Mapped[str | None] = mapped_column(String, nullable=True)
     vasp_identified: Mapped[str | None] = mapped_column(String, nullable=True)
     cluster_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)

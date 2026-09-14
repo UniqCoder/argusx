@@ -106,6 +106,20 @@ function LiveAlerts() {
 
       {/* Alert list */}
       <div className="ug-surface" style={{ overflow: "hidden" }}>
+        {filtered.length === 0 && (
+          <p
+            style={{
+              padding: "1.25rem",
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.68rem",
+              color: "var(--color-muted-foreground)",
+            }}
+          >
+            {events.length === 0
+              ? "No alerts yet — nothing has triggered a hold/block decision or registry flag."
+              : `No ${filter} alerts. ${events.length} total across other severities.`}
+          </p>
+        )}
         {filtered.map((evt, i) => {
           const color = SEV_COLOR[evt.severity];
           const isLast = i === filtered.length - 1;

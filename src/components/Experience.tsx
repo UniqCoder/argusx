@@ -12,12 +12,14 @@ export function Experience() {
     return detach;
   }, []);
 
-  const dpr = useMemo(() => {
-    if (reducedMotion) return [1, 1] as const;
+  // R3F's `Dpr` tuple type is mutable ([min, max]), so these must not be
+  // `as const` readonly tuples — that was a real type error, not a cosmetic one.
+  const dpr = useMemo<[number, number]>(() => {
+    if (reducedMotion) return [1, 1];
     const isMobile =
       typeof window !== "undefined" && window.innerWidth < 768;
-    if (isMobile) return [1, 1.25] as const;
-    return [1, 1.5] as const;
+    if (isMobile) return [1, 1.25];
+    return [1, 1.5];
   }, [reducedMotion]);
 
   return (

@@ -1454,26 +1454,20 @@ body {
 
 .ug-workspace {
   display: grid;
-  grid-template-columns: 232px minmax(480px, 1fr) 272px;
+  /* One context column, not two: the graph is the primary investigative
+     surface and should get most of the width. Case context and the
+     evidence inspector used to be two separate columns competing for
+     screen space with the graph squeezed in the middle; they're now one
+     panel that switches between a case summary and a selection's detail. */
+  grid-template-columns: minmax(480px, 1fr) 300px;
   grid-template-rows: 1fr auto;
   gap: 0;
   height: calc(100vh - 48px);
-  /* Never let the center graph column get squeezed to 0 width on a
-     narrower window — .ug-page (the scroll container) goes horizontal
-     instead. See its overflow-x comment. */
-  min-width: 960px;
+  /* Never let the graph column get squeezed to 0 width on a narrower
+     window — .ug-page (the scroll container) goes horizontal instead. See
+     its overflow-x comment. */
+  min-width: 820px;
   overflow: hidden;
-}
-
-.ug-workspace__left {
-  border-right: 1px solid var(--border-strong);
-  overflow-y: auto;
-  padding: 1.25rem;
-  background: var(--bg-header);
-  scrollbar-width: none;
-}
-.ug-workspace__left::-webkit-scrollbar {
-  display: none;
 }
 
 .ug-workspace__center {
@@ -1493,6 +1487,23 @@ body {
 }
 .ug-workspace__right::-webkit-scrollbar {
   display: none;
+}
+
+/* A node's "discovery" moment — plays once, automatically, the instant the
+   SVG element for a newly-revealed node mounts (React only creates the
+   element once `frame.revealedNodes` includes it, so no extra JS state is
+   needed to know when to play this). Origin is 0 0, not center/50%, because
+   every child element (circle, glyph, labels) is already drawn in local
+   coordinates centred on the node's own translate — see TraceGraph.tsx. */
+@keyframes tg-node-in {
+  from {
+    opacity: 0;
+    transform: scale(0.35);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .ug-trace-canvas {

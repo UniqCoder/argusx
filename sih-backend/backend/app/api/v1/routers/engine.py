@@ -9,28 +9,34 @@ Mutating endpoints (anchor registration, running a trace) require
 investigator/admin — a compliance_viewer (read-only per PRD §5) cannot create
 ground-truth anchors or trigger a freeze-adjacent decision.
 """
+import asyncio
+import json
 import logging
 from decimal import Decimal
 from typing import Annotated, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import CurrentUserDep, InvestigatorOrAdminDep
-from app.db.session import get_db
+from app.db.session import AsyncSessionLocal, get_db
 from app.engine import anchors as anchor_engine
 from app.engine import ledger as ledger_engine
 from app.engine.anchors import DuplicateAnchorError
-from app.engine.decision import decide
 from app.engine.taint import propagate_taint
-from app.models.engine import Decision, TaintNode, Trace
+from app.models.engine import Anchor, Decision, TaintNode, Trace
 from app.schemas.common import ErrorEnvelope
+from app.services import complaint_service, trace_jobs
+from app.services.trace_runner import persist_trace
 from app.schemas.engine import (
     AnchorCreate,
     AnchorRead,
+    ClusterRead,
     DecisionRead,
+    InboundSourceRead,
     LedgerVerifyResponse,
     TaintNodeRead,
     TraceRequest,
@@ -98,6 +104,17 @@ async def create_anchor(
     return AnchorRead.model_validate(anchor)
 
 
+async def _complaint_count_for(db: AsyncSession, address: str, chain: str) -> int:
+    """How many complaints name this address — the basis for PRIMARY_SUSPECT.
+
+    Thin wrapper: the actual query now lives in complaint_service, shared
+    with app/services/risk_service.py's corroboration bonus so the engine's
+    role assignment and the risk score's evidence are counting the same
+    thing the same way.
+    """
+    return await complaint_service.complaint_count_for(db, address, chain)
+
+
 # ── Layer 1 — Trace ─────────────────────────────────────────────────────────────
 
 @engine_router.post(
@@ -135,117 +152,189 @@ async def run_trace(
             },
         )
 
+    # The tainted seed, in the chain's native unit. This was hardcoded to 1.0
+    # — i.e. every trace silently assumed "exactly 1.0 ETH/BTC/TRX was stolen"
+    # regardless of the actual complaint, and every taint_fraction downstream
+    # was arithmetic on that invented number. Now: use the amount the caller
+    # states if there is one, otherwise pass None so the engine seeds from the
+    # anchor address's real observed inflow. Which of the two was used is
+    # reported back on the result as `seed_basis`, so it is never ambiguous.
+    complaint_count = await _complaint_count_for(db, anchor.address, anchor.chain)
     result = await propagate_taint(
         anchor_address=anchor.address,
         anchor_chain=anchor.chain,
-        anchor_taint_value=1.0,
+        anchor_taint_value=float(body.seed_value) if body.seed_value is not None else None,
         method=body.method,
         max_hops=body.max_hops,
         max_nodes=body.max_nodes,
         dilution_floor=float(body.dilution_floor),
+        complaint_count=complaint_count,
     )
 
-    trace = Trace(
-        anchor_id=anchor.id,
-        method=body.method.value,
-        dilution_floor=body.dilution_floor,
-        max_hops=body.max_hops,
-        max_nodes=body.max_nodes,
-        node_count=len(result.nodes),
-        reproducible_hash=result.reproducible_hash,
-    )
-    db.add(trace)
-    await db.flush()
-
-    victim_amount = anchor.victim_amount_inr
-    for node in result.nodes:
-        tainted_inr = (
-            Decimal(str(victim_amount)) * Decimal(str(round(node.taint_fraction, 6)))
-            if victim_amount is not None
-            else None
-        )
-        db.add(
-            TaintNode(
-                trace_id=trace.id,
-                address=node.address,
-                chain=node.chain,
-                hop=node.hop,
-                taint_fraction=node.taint_fraction,
-                tainted_value=node.taint_value,
-                tainted_inr=tainted_inr,
-                terminal_kind=node.terminal_kind,
-                entity_name=node.entity_name,
-                entity_jurisdiction=node.entity_jurisdiction,
-                proof_path=node.proof_path,
-                first_tainted_at=node.first_tainted_at,
-                parent_address=node.parent_address,
-                tx_hash=node.tx_hash,
-                tx_amount=node.tx_amount,
-            )
-        )
-
-    import datetime as _dt
-    trace.completed_at = _dt.datetime.now(_dt.timezone.utc)
-
-    # Feed the strongest VASP terminal (if any) to the decision engine.
-    vasp_terminals = [n for n in result.terminals if n.terminal_kind == "VASP"]
-    best_terminal = max(vasp_terminals, key=lambda n: n.taint_value, default=None)
-    if best_terminal is None and result.terminals:
-        best_terminal = max(result.terminals, key=lambda n: n.taint_value)
-
-    decision_result = decide(
-        anchor_id=anchor.id,
-        anchor_attestation_class=anchor.attestation_class,
-        trace_id=trace.id,
-        terminal=best_terminal,
-    )
-    decision = Decision(
-        case_id=anchor.case_id,
-        address=anchor.address,
-        chain=anchor.chain,
-        action=decision_result.action.value,
-        basis_anchor_id=decision_result.basis_anchor_id,
-        basis_trace_id=decision_result.basis_trace_id,
-        ml_contributed=decision_result.ml_contributed,
-        reasoning=decision_result.reasoning,
-        expires_at=decision_result.expires_at,
-    )
-    db.add(decision)
-    await db.commit()
-    await db.refresh(trace)
-    await db.refresh(decision)
-
-    await ledger_engine.append_entry(
-        db,
-        event_type="trace_completed",
-        payload={
-            "trace_id": str(trace.id), "anchor_id": str(anchor.id),
-            "node_count": len(result.nodes), "reproducible_hash": result.reproducible_hash,
-        },
-        actor=current_user.sub,
-        case_id=anchor.case_id,
-    )
-    await ledger_engine.append_entry(
-        db,
-        event_type="decision_issued",
-        payload={
-            "decision_id": str(decision.id), "action": decision.action,
-            "reasoning": decision.reasoning,
-        },
-        actor=current_user.sub,
-        case_id=anchor.case_id,
-    )
-
-    logger.info(
-        "trace_completed",
-        extra={
-            "trace_id": str(trace.id), "anchor_id": str(anchor.id),
-            "node_count": len(result.nodes), "decision": decision.action,
-        },
-    )
+    trace, _decision = await persist_trace(db, anchor, body, result, actor=current_user.sub)
 
     return _build_trace_result(anchor, trace, result.nodes, result.terminals,
-                                result.unattributed_residual, result.terminated_at_mixer)
+                                result.unattributed_residual, result.terminated_at_mixer,
+                                result.inbound_sources, result.clusters,
+                                result.typologies, result.path_risk)
+
+
+# ── Layer 1 (streaming) — watch a trace as it runs ────────────────────────────
+#
+# Same engine, same ordering, same persisted rows as POST /engine/trace. The
+# only difference is that nodes are reported as they are settled instead of all
+# at once at the end, so the graph draws from the first hop rather than after
+# the last one. See app/services/trace_jobs.py for the single-process caveat.
+
+
+async def _run_trace_job(job_id: str, anchor_id: UUID, body: TraceRequest, actor: str) -> None:
+    """The background half of a streaming trace. Owns its own DB session."""
+    job = trace_jobs.get_job(job_id)
+    if job is None:
+        return
+
+    async def emit(event_type: str, data: dict) -> None:
+        job.append(event_type, data)
+        # Hand control back to the event loop so a subscriber can actually send
+        # what was just appended. Without this the engine's awaits are all on
+        # network I/O and a fast (seeded) trace would arrive as one burst at the
+        # end — technically streamed, visibly not.
+        await asyncio.sleep(0)
+
+    try:
+        async with AsyncSessionLocal() as db:
+            anchor = await anchor_engine.get_anchor(db, anchor_id)
+            if anchor is None:
+                job.fail("ANCHOR_NOT_FOUND", f"Anchor '{anchor_id}' was not found.")
+                return
+
+            await emit("started", {
+                "anchor_id": str(anchor.id),
+                "address": anchor.address,
+                "chain": anchor.chain,
+                "max_hops": body.max_hops,
+                "max_nodes": body.max_nodes,
+            })
+
+            complaint_count = await _complaint_count_for(db, anchor.address, anchor.chain)
+            result = await propagate_taint(
+                anchor_address=anchor.address,
+                anchor_chain=anchor.chain,
+                anchor_taint_value=float(body.seed_value) if body.seed_value is not None else None,
+                method=body.method,
+                max_hops=body.max_hops,
+                max_nodes=body.max_nodes,
+                dilution_floor=float(body.dilution_floor),
+                on_event=emit,
+                complaint_count=complaint_count,
+            )
+
+            trace, _decision = await persist_trace(db, anchor, body, result, actor=actor)
+            payload = _build_trace_result(
+                anchor, trace, result.nodes, result.terminals,
+                result.unattributed_residual, result.terminated_at_mixer,
+                result.inbound_sources, result.clusters,
+                result.typologies, result.path_risk,
+            )
+            job.finish(json.loads(payload.model_dump_json()))
+    except Exception as exc:  # noqa: BLE001 — the job must report, never vanish
+        logger.exception("trace_job_failed", extra={"job_id": job_id})
+        job.fail("TRACE_FAILED", str(exc))
+
+
+@engine_router.post(
+    "/trace/jobs",
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        401: {"model": ErrorEnvelope},
+        403: {"model": ErrorEnvelope},
+        404: {"model": ErrorEnvelope, "description": "Anchor not found"},
+    },
+    summary="Start a trace and stream its nodes as the engine settles them",
+)
+async def start_trace_job(
+    body: TraceRequest,
+    current_user: InvestigatorOrAdminDep,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    # Validate the anchor before accepting the job, so a bad anchor_id is a 404
+    # on this request rather than an error event on a stream nobody is watching
+    # yet.
+    anchor = await anchor_engine.get_anchor(db, body.anchor_id)
+    if anchor is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": {
+                "code": "ANCHOR_NOT_FOUND",
+                "message": f"Anchor '{body.anchor_id}' was not found.",
+                "details": {"anchor_id": str(body.anchor_id)},
+            }},
+        )
+
+    job = trace_jobs.create_job()
+    asyncio.create_task(_run_trace_job(job.id, body.anchor_id, body, current_user.sub))
+    return {
+        "job_id": job.id,
+        "status": job.status,
+        "events_url": f"/api/v1/engine/trace/jobs/{job.id}/events",
+        "snapshot_url": f"/api/v1/engine/trace/jobs/{job.id}",
+    }
+
+
+@engine_router.get(
+    "/trace/jobs/{job_id}/events",
+    responses={404: {"model": ErrorEnvelope}},
+    summary="Server-sent event stream of a running trace",
+)
+async def stream_trace_job(
+    job_id: str,
+    current_user: InvestigatorOrAdminDep,
+):
+    job = trace_jobs.get_job(job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": {
+                "code": "JOB_NOT_FOUND",
+                "message": f"Trace job '{job_id}' was not found or has expired.",
+                "details": {"job_id": job_id},
+            }},
+        )
+
+    async def event_stream():
+        async for event in trace_jobs.subscribe(job):
+            yield f"event: {event['type']}\ndata: {json.dumps(event['data'])}\n\n"
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            # Nginx and friends buffer by default, which would hold the whole
+            # stream until the trace finished — the exact behaviour this
+            # endpoint exists to avoid.
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@engine_router.get(
+    "/trace/jobs/{job_id}",
+    responses={404: {"model": ErrorEnvelope}},
+    summary="Snapshot of a trace job, for clients that cannot hold a stream open",
+)
+async def get_trace_job(job_id: str, current_user: InvestigatorOrAdminDep) -> dict:
+    job = trace_jobs.get_job(job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": {
+                "code": "JOB_NOT_FOUND",
+                "message": f"Trace job '{job_id}' was not found or has expired.",
+                "details": {"job_id": job_id},
+            }},
+        )
+    return trace_jobs.snapshot(job)
 
 
 @engine_router.get(
@@ -291,6 +380,32 @@ async def get_trace(
         terminated_at_mixer=Decimal(str(mixer_total)),
         reproducible_hash=trace.reproducible_hash,
         completed_at=trace.completed_at,
+        # Read back from the persisted row so a re-fetched trace carries the
+        # same caveats the original run reported. Traces written before
+        # migration 0005 have no recorded accounting: depth_reached is still
+        # genuinely recoverable from the stored hops, the rest are reported as
+        # "unrecorded" rather than back-filled with invented values.
+        depth_reached=(
+            trace.depth_reached
+            if trace.depth_reached is not None
+            else max((n.hop for n in nodes), default=0)
+        ),
+        termination_reason=trace.termination_reason or "unrecorded",
+        seed_value=Decimal(str(trace.seed_value or 0)),
+        seed_basis=trace.seed_basis or "unrecorded",
+        pruned_branch_count=trace.pruned_branch_count or 0,
+        pruned_branch_value=Decimal(str(trace.pruned_branch_value or 0)),
+        asset=trace.asset or "unrecorded",
+        asset_basis=trace.asset_basis or "unrecorded",
+        other_asset_branch_count=trace.other_asset_branch_count or 0,
+        data_source=trace.data_source or "live",
+        scenario_key=trace.scenario_key,
+        inbound_sources=[
+            InboundSourceRead.model_validate(s) for s in (trace.inbound_sources or [])
+        ],
+        clusters=[ClusterRead.model_validate(c) for c in (trace.clusters or [])],
+        typologies=trace.typologies or [],
+        path_risk=trace.path_risk or {},
     )
 
 
@@ -376,10 +491,25 @@ def _taint_node_from_row(row: TaintNode) -> TaintNodeRead:
         tx_hash=row.tx_hash,
         tx_amount=row.tx_amount,
         first_tainted_at=row.first_tainted_at,
+        pruned_child_count=row.pruned_child_count or 0,
+        pruned_child_value=Decimal(str(row.pruned_child_value or 0)),
+        other_asset_child_count=row.other_asset_child_count or 0,
+        role=row.role,
+        role_basis=row.role_basis,
+        description=row.description,
+        cluster_id=row.cluster_id,
+        cluster_label=row.cluster_label,
+        value_in=Decimal(str(row.value_in or 0)),
+        value_out=Decimal(str(row.value_out or 0)),
+        value_parked=Decimal(str(row.value_parked or 0)),
+        link_basis=row.link_basis or "ON_CHAIN",
+        link_confidence=float(row.link_confidence) if row.link_confidence is not None else None,
+        link_detail=row.link_detail,
     )
 
 
-def _build_trace_result(anchor, trace, engine_nodes, engine_terminals, unattributed, mixer_total) -> TraceResult:
+def _build_trace_result(anchor, trace, engine_nodes, engine_terminals, unattributed, mixer_total,
+                         inbound_sources=(), clusters=(), typologies=(), path_risk=None) -> TraceResult:
     nodes = [
         TaintNodeRead(
             address=n.address, chain=n.chain, hop=n.hop,
@@ -395,6 +525,20 @@ def _build_trace_result(anchor, trace, engine_nodes, engine_terminals, unattribu
             parent_address=n.parent_address, tx_hash=n.tx_hash,
             tx_amount=(Decimal(str(round(n.tx_amount, 8))) if n.tx_amount is not None else None),
             first_tainted_at=n.first_tainted_at,
+            pruned_child_count=n.pruned_child_count or 0,
+            pruned_child_value=Decimal(str(n.pruned_child_value or 0)),
+            other_asset_child_count=n.other_asset_child_count or 0,
+            role=n.role,
+            role_basis=n.role_basis,
+            description=n.description,
+            cluster_id=n.cluster_id,
+            cluster_label=n.cluster_label,
+            value_in=Decimal(str(round(n.value_in, 8))),
+            value_out=Decimal(str(round(n.value_out, 8))),
+            value_parked=Decimal(str(round(n.value_parked, 8))),
+            link_basis=n.link_basis,
+            link_confidence=n.link_confidence,
+            link_detail=n.link_detail,
         )
         for n in engine_nodes
     ]
@@ -412,4 +556,32 @@ def _build_trace_result(anchor, trace, engine_nodes, engine_terminals, unattribu
         terminated_at_mixer=Decimal(str(round(mixer_total, 8))),
         reproducible_hash=trace.reproducible_hash,
         completed_at=trace.completed_at,
+        inbound_sources=[
+            InboundSourceRead(
+                address=src.address, chain=src.chain, amount=Decimal(str(round(src.amount, 8))),
+                asset=src.asset, tx_hash=src.tx_hash, timestamp=src.timestamp,
+            )
+            for src in inbound_sources
+        ],
+        clusters=[ClusterRead.model_validate(c) for c in clusters],
+        typologies=list(typologies),
+        path_risk=path_risk or {},
+        # Traces created before migration 0005 have no recorded accounting.
+        # Fall back to values derivable from the stored nodes rather than
+        # inventing any: depth_reached is genuinely recoverable from the hops.
+        depth_reached=(
+            trace.depth_reached
+            if trace.depth_reached is not None
+            else max((n.hop for n in engine_nodes), default=0)
+        ),
+        termination_reason=trace.termination_reason or "unrecorded",
+        seed_value=Decimal(str(trace.seed_value or 0)),
+        seed_basis=trace.seed_basis or "unrecorded",
+        pruned_branch_count=trace.pruned_branch_count or 0,
+        pruned_branch_value=Decimal(str(trace.pruned_branch_value or 0)),
+        asset=trace.asset or "unrecorded",
+        asset_basis=trace.asset_basis or "unrecorded",
+        other_asset_branch_count=trace.other_asset_branch_count or 0,
+        data_source=trace.data_source or "live",
+        scenario_key=trace.scenario_key,
     )

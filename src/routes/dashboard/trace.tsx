@@ -1,6 +1,9 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useCaseContext } from "@/store/case-context-store";
+import { isValidTraceInputFor } from "@/lib/address";
+import { ScenarioPicker } from "@/components/dashboard/ScenarioPicker";
+import type { ScenarioRead } from "@/lib/api-types";
 
 export const Route = createFileRoute("/dashboard/trace")({
   component: TraceWallet,
@@ -15,26 +18,34 @@ type Chain = (typeof CHAINS)[number];
 // every TRON trace request silently sent the wrong value.
 const CHAIN_META: Record<
   Chain,
-  { symbol: string; chainId: "BTC" | "ETH" | "TRON" | "BSC" | "Polygon"; color: string }
+  { symbol: string; chainId: "BTC" | "ETH" | "TRON" | "BSC" | "POLYGON"; color: string }
 > = {
   Ethereum: { symbol: "ETH", chainId: "ETH", color: "oklch(0.72 0.12 270)" },
   Bitcoin: { symbol: "BTC", chainId: "BTC", color: "oklch(0.79 0.15 74)" },
   TRON: { symbol: "TRX", chainId: "TRON", color: "oklch(0.64 0.22 18)" },
   BSC: { symbol: "BNB", chainId: "BSC", color: "oklch(0.84 0.14 90)" },
-  Polygon: { symbol: "MATIC", chainId: "Polygon", color: "oklch(0.72 0.18 290)" },
+  Polygon: { symbol: "MATIC", chainId: "POLYGON", color: "oklch(0.72 0.18 290)" },
 };
 
-// Real addresses, verified end-to-end against the live v2 taint-propagation
-// engine — chosen specifically because each demonstrates a different real
-// engine capability, not just "this string parses":
-//   ETH:  a real wallet with genuine outgoing branching (multi-hop, several
-//         active + dust-terminated children)
-//   TRON: a real wallet with deep genuine branching (40+ nodes across 6 hops)
-//   BTC:  a real known-VASP address — the engine attributes it to Binance
-//         at hop 0 from the live known-entity registry, not a guess
-// (A contract address like a token contract, or a wallet that's only ever
-// received funds, will honestly show 0 outgoing hops — that's correct
-// behavior, not a bug, so these three were picked to avoid that dead end.)
+// Real addresses, each chosen to exercise a different genuine engine outcome.
+//
+// These descriptions were re-measured after the ERC-20 fix, because they had
+// drifted from reality: the ETH entry was described as showing "multi-hop
+// branching" but actually returned 5 nodes and 3 hops, because the explorer
+// only read native-ETH value and every USDT transfer looked like a 0-value
+// transaction. The same address now traces USDT ~6 hops to a Binance deposit.
+//
+//   ETH:  a wallet whose real activity is USDT — now traces ~19 addresses
+//         across ~6 hops. Live, so the exact shape moves with the chain.
+//   TRON: deep genuine TRC-20/TRX branching (tens of addresses).
+//   BTC:  a known-VASP address. The engine attributes it to Binance at hop 0
+//         and correctly stops there — a complete 1-node answer, not a failure,
+//         and the workspace now explains that rather than showing a lone dot.
+//
+// A live trace walks one address at a time against public explorers, so it
+// takes ~30-60s. The simulated demo case below is instant and is the one to
+// use when the mixer / bridge / cross-chain / cross-victim paths need to be
+// shown on demand.
 const EXAMPLES = [
   {
     label: "ETH — Real Branching",
@@ -69,11 +80,29 @@ function TraceWallet() {
   const chainId = CHAIN_META[chain].chainId;
   const chainSupported = BACKEND_SUPPORTED.has(chainId);
 
+  // Per-chain shape check BEFORE the backend is contacted — malformed input
+  // (truncated "0xE3B9..." copies, wrong-chain shapes, stray characters)
+  // used to reach the real explorers and come back as a confusing
+  // "Backend unreachable"-style failure.
+  const trimmedAddress = address.trim();
+  const addressValid = isValidTraceInputFor(chainId, trimmedAddress);
+  const canTrace = !!trimmedAddress && chainSupported && addressValid;
+
+  // Loading a scenario is the same action as tracing any other wallet: set the
+  // active wallet and navigate. There is no special path, no short-circuit and
+  // no local fixture — the investigation page runs a real trace against the
+  // real engine, which is why Cross-Victim, Deposit Watch, the report and the
+  // evidence ledger all work on these cases.
+  const loadScenario = (scenario: ScenarioRead) => {
+    setActiveWallet(scenario.anchor_address, scenario.anchor_chain);
+    navigate({ to: "/dashboard/investigation" });
+  };
+
   const handleTrace = () => {
-    if (!address.trim() || !chainSupported) return;
+    if (!trimmedAddress || !chainSupported || !addressValid) return;
     // Set context from trace input, then navigate straight to the results
     // page — it fetches the real trace itself, no fake loading delay here.
-    setActiveWallet(address, chainId);
+    setActiveWallet(trimmedAddress, chainId);
     navigate({ to: "/dashboard/investigation" });
   };
 
@@ -155,6 +184,24 @@ function TraceWallet() {
           </div>
 
           {/* Chain selector */}
+          {trimmedAddress && !addressValid && (
+            <p
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: "0.68rem",
+                color: "var(--color-destructive, oklch(0.65 0.2 25))",
+                marginTop: "-0.9rem",
+                marginBottom: "1.5rem",
+                lineHeight: 1.6,
+              }}
+            >
+              Doesn't look like a valid {CHAIN_META[chain].symbol} address or
+              transaction hash — check for truncation (…), stray characters,
+              or the wrong chain selected above.
+            </p>
+          )}
+
+          {/* Chain selector */}
           <div style={{ marginBottom: "1.5rem" }}>
             <label
               style={{
@@ -234,7 +281,7 @@ function TraceWallet() {
           <button
             className="ug-btn-primary"
             onClick={handleTrace}
-            disabled={!address.trim() || !chainSupported}
+            disabled={!canTrace}
             style={{
               width: "100%",
               justifyContent: "center",
@@ -247,6 +294,8 @@ function TraceWallet() {
         </div>
       </div>
 
+      <ScenarioPicker onLoad={loadScenario} />
+
       {/* Example addresses */}
       <div
         className="ug-surface"
@@ -255,6 +304,16 @@ function TraceWallet() {
         <div className="ug-panel-header">
           <span className="ug-section-title" style={{ marginBottom: 0 }}>
             Load Example
+          </span>
+          <span
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.55rem",
+              letterSpacing: "0.14em",
+              color: "var(--color-accent)",
+            }}
+          >
+            LIVE DATA
           </span>
         </div>
         {EXAMPLES.map((ex, i) => (
@@ -329,9 +388,12 @@ function TraceWallet() {
           lineHeight: 1.65,
         }}
       >
-        Traces run against live blockchain data. Multi-hop paths, bridge
-        interactions, and mixer proximity are automatically detected. Results
-        appear in the Investigation Workspace.
+        Traces run against live blockchain data (only BTC, ETH, and TRON are
+        supported). Multi-hop paths, bridge interactions, and mixer proximity
+        are automatically detected. Note: smart contracts and wallets that
+        have only ever received funds legitimately produce a single-node
+        result — that's a complete trace, not a failure. Results appear in
+        the Investigation Workspace.
       </div>
     </div>
   );

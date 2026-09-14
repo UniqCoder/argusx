@@ -60,8 +60,27 @@ class RiskEvidence(BaseModel):
 
 
 class RiskResponse(BaseModel):
+    # `model_version` collides with Pydantic v2's reserved "model_" prefix
+    # (used internally for e.g. `model_config`, `model_dump`) — this is the
+    # field name that actually matches the domain concept (the ML model's
+    # version) and the JSON contract callers expect, so silence the
+    # namespace warning rather than rename it to something less clear.
+    model_config = {"protected_namespaces": ()}
+
     risk_score: Optional[float] = Field(None, ge=0.0, le=1.0)
     risk_tier: RiskTier = RiskTier.unknown
-    risk_source: Literal["ml_model", "sanctions_override"] = "ml_model"
+    risk_source: Literal[
+        "ml_model", "sanctions_override", "sanctions_blended", "corroborated"
+    ] = "ml_model"
     evidence: List[RiskEvidence] = Field(default_factory=list)
     osint: List[OsintEvidence] = Field(default_factory=list)
+    # Provenance for this exact result — lets an investigator (or a test)
+    # confirm two numbers that look the same actually came from the same
+    # computation, and tells them precisely why two numbers that look
+    # different are allowed to differ (a genuinely new evidence snapshot,
+    # not a bug). None on the degraded "unknown" response, where none of
+    # this ran.
+    model_version: Optional[str] = None
+    feature_schema_version: Optional[str] = None
+    snapshot_id: Optional[str] = None
+    calculated_at: Optional[str] = None

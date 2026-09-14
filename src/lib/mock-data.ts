@@ -19,7 +19,7 @@ export type CaseStatus =
   | "critical"
   | "evidence-ready"
   | "closed";
-export type Blockchain = "BTC" | "ETH" | "TRON" | "BSC" | "Polygon";
+export type Blockchain = "BTC" | "ETH" | "TRON" | "BSC" | "POLYGON";
 export type FraudType =
   | "Investment Scam"
   | "Task Fraud"
@@ -40,7 +40,14 @@ export interface InvestigationCase {
   reportedWallet: string;
   traceStatus: CaseStatus;
   networkSignal: "HIGH" | "MEDIUM" | "LOW" | "NONE";
-  riskScore: number;
+  // null when the linked wallet has never been scored — genuinely different
+  // from a real 0, and must never be coerced into one.
+  riskScore: number | null;
+  // The backend's own tier string ("critical"/"high"/"medium"/"low"/
+  // "unknown") — color must always come from THIS, never re-derived from
+  // riskScore with a second set of thresholds that can disagree with the
+  // backend's 0.30/0.60/0.85 boundaries.
+  riskTier: string | null;
   victimCount: number;
   lastActivity: string;
   description: string;
@@ -81,8 +88,31 @@ export interface TraceNode {
   // ordering — not decoration.
   firstTaintedAt?: string;
   // Real terminal classification from the backend (VASP/MIXER_BOUNDARY/
-  // BRIDGE/DUST/DEPTH_LIMIT/NODE_LIMIT/NO_OUTFLOW), when this node is one.
+  // BRIDGE/DUST/DEPTH_LIMIT/NODE_LIMIT/NO_OUTFLOW/DILUTED_OUTFLOW/
+  // EXPLORER_UNAVAILABLE), when this node is one.
   terminalKind?: string;
+  // Hop distance from the traced (root) wallet. Real, from the engine.
+  hop?: number;
+  // Real entity attribution from the curated registries (e.g. "Binance"),
+  // only where one genuinely matched.
+  entity?: string;
+  // Branches the engine deliberately did not follow from this node, and why.
+  // Lets a sparse node say "4 onward transfers were below the dust floor"
+  // rather than just looking like a dead end.
+  prunedChildCount?: number;
+  prunedChildValue?: number;
+  otherAssetChildCount?: number;
+  // The investigation target — decoupled from `hop === 0` so a real victim/
+  // complaint node (from cross-victim correlation) can be prepended at an
+  // earlier layer without the searched wallet losing its "this is the
+  // target" visual treatment.
+  isTarget?: boolean;
+  // The target IS a suspected fraudster wallet only when real evidence says
+  // so — at least one victim's complaint actually names it (see
+  // investigation.tsx, where this is set from real `linkedComplaints`, never
+  // hardcoded). A target with no complaints against it stays a neutral
+  // "searched wallet": ARGUS has no evidence to call it anything else.
+  isSuspectedFraudster?: boolean;
   x: number;
   y: number;
 }
@@ -106,6 +136,10 @@ export interface RiskSignal {
   id: string;
   label: string;
   contribution: number;
+  // Whether this feature pushed the score up or down — real, from the
+  // model's own SHAP output, not inferred from the contribution magnitude
+  // (which is always positive; direction is a separate axis).
+  direction: "increases_risk" | "decreases_risk";
   evidence: string;
   dataSource: string;
   detail: string;

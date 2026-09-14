@@ -3,32 +3,12 @@ import { useState } from "react";
 import { useCorrelation } from "@/hooks/use-correlation";
 import { useCaseContext } from "@/store/case-context-store";
 import { BackendOfflineBanner } from "@/components/shared/BackendOfflineBanner";
-import { truncateAddress } from "@/lib/address";
+import { truncateAddress, isValidTraceInputFor } from "@/lib/address";
 import type { Chain, Complaint } from "@/lib/api-types";
 
 export const Route = createFileRoute("/dashboard/cross-victim")({
   component: CrossVictim,
 });
-
-// ── Animated node graph — 3 victims converging on 1 wallet ────────────────
-const CV_NODES = [
-  { id: "v1", x: 80, y: 60, label: "VICTIM A", type: "victim" },
-  { id: "v2", x: 80, y: 180, label: "VICTIM B", type: "victim" },
-  { id: "v3", x: 80, y: 300, label: "VICTIM C", type: "victim" },
-  { id: "r1", x: 310, y: 180, label: "REPORTED", type: "reported" },
-  { id: "e1", x: 510, y: 180, label: "EXCHANGE", type: "exchange" },
-];
-const CV_EDGES = [
-  { from: "v1", to: "r1" },
-  { from: "v2", to: "r1" },
-  { from: "v3", to: "r1" },
-  { from: "r1", to: "e1" },
-];
-const NODE_C: Record<string, string> = {
-  victim: "oklch(0.72 0.024 250)",
-  reported: "oklch(0.64 0.22 18)",
-  exchange: "oklch(0.79 0.15 74)",
-};
 
 // ── Page ─────────────────────────────────────────────────────────────────
 function CrossVictim() {
@@ -38,16 +18,24 @@ function CrossVictim() {
 
   const [input, setInput] = useState("");
   const [wallet, setWallet] = useState<string | null>(null);
-  const [chain, setChain] = useState<
-    "BTC" | "ETH" | "TRON" | "BSC" | "Polygon"
-  >("ETH");
+  const [chain, setChain] = useState<"BTC" | "ETH" | "TRON">("ETH");
+  // Bumped on every CORRELATE press so a second press on the SAME wallet
+  // fires a new request instead of silently doing nothing — pressing the
+  // button used to only call setWallet(trimmed), and React bails on an
+  // effect dependency that has not changed.
+  const [requestNonce, setRequestNonce] = useState(0);
+
+  const trimmedInput = input.trim();
+  const inputValid =
+    !trimmedInput || isValidTraceInputFor(chain, trimmedInput);
 
   const {
     signal: sig,
     linkedComplaints,
     loading,
     error,
-  } = useCorrelation(wallet, chain as Chain);
+    notFound,
+  } = useCorrelation(wallet, chain as Chain, requestNonce);
 
   // Real, derived from actual complaint filing dates — not a fabricated
   // constant. Falls back to 0 when there's nothing to derive it from yet.
@@ -61,14 +49,20 @@ function CrossVictim() {
 
   const handleSearch = () => {
     const trimmed = input.trim();
-    if (!trimmed) return;
+    if (!trimmed || !isValidTraceInputFor(chain, trimmed)) return;
     setWallet(trimmed);
-    recordRecentWallet(trimmed);
+    setRequestNonce((n) => n + 1);
+    recordRecentWallet(trimmed, chain);
   };
 
-  const handlePreset = (addr: string) => {
+  // Restores the wallet AND the chain it was originally searched on, so a
+  // preset chip can never pair an address with the wrong chain (the
+  // chain-mismatch bug that sent ETH addresses to the BTC explorer).
+  const handlePreset = (addr: string, presetChain: typeof chain) => {
     setInput(addr);
     setWallet(addr);
+    setChain(presetChain);
+    setRequestNonce((n) => n + 1);
   };
 
   const handleOpenInvestigation = () => {
@@ -139,13 +133,42 @@ function CrossVictim() {
         </div>
 
         <div
-          style={{ padding: "1rem 1.25rem", display: "flex", gap: "0.5rem" }}
+          style={{
+            padding: "1rem 1.25rem",
+            display: "flex",
+            gap: "0.5rem",
+            alignItems: "stretch",
+          }}
         >
+          {/* The chain the pasted address belongs to — recorded with the
+              wallet in the recent list and used for the correlation call.
+              Without it, every address searched here was assumed ETH (the
+              chain-mismatch bug: a TRON/BTC address then got fetched with
+              the wrong explorer and failed). */}
+          <select
+            value={chain}
+            onChange={(e) => setChain(e.target.value as typeof chain)}
+            style={{
+              padding: "0.75rem 0.85rem",
+              background: "var(--bg-2)",
+              border: "1px solid var(--border-strong)",
+              borderRadius: "2px",
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.78rem",
+              color: "var(--color-foreground)",
+              outline: "none",
+              cursor: "pointer",
+            }}
+          >
+            <option value="BTC">BTC</option>
+            <option value="ETH">ETH</option>
+            <option value="TRON">TRX (TRON)</option>
+          </select>
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            placeholder="Paste wallet — 0x…   T…   1A…   or tx hash"
+            placeholder="Paste wallet — 0x…   T…   1A…"
             style={{
               flex: 1,
               padding: "0.75rem 1rem",
@@ -171,7 +194,7 @@ function CrossVictim() {
           <button
             className="ug-btn-primary"
             onClick={handleSearch}
-            disabled={!input.trim() || loading}
+            disabled={!trimmedInput || !inputValid || loading}
             style={{
               padding: "0.75rem 1.5rem",
               fontSize: "0.72rem",
@@ -201,228 +224,98 @@ function CrossVictim() {
           >
             Recently searched
           </p>
-          {recentWallets.length === 0 ? (
-            <p
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "0.6rem",
-                color: "var(--color-muted-foreground)",
-              }}
-            >
-              No wallets searched yet this session.
-            </p>
-          ) : (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
-              {recentWallets.map((addr) => (
-                <button
-                  key={addr}
-                  onClick={() => handlePreset(addr)}
-                  style={{
-                    padding: "0.28rem 0.65rem",
-                    fontFamily: "var(--font-mono)",
-                    fontSize: "0.6rem",
-                    background:
-                      wallet === addr
-                        ? "oklch(0.83 0.14 205 / 12%)"
-                        : "var(--bg-2)",
-                    border: `1px solid ${wallet === addr ? "var(--color-accent)" : "var(--border-strong)"}`,
-                    borderRadius: "2px",
-                    color:
-                      wallet === addr
-                        ? "var(--color-accent)"
-                        : "var(--color-muted-foreground)",
-                    cursor: "pointer",
-                    letterSpacing: "0.04em",
-                    transition: "all 0.12s",
-                  }}
-                >
-                  {truncateAddress(addr)}
-                </button>
-              ))}
-            </div>
-          )}
+          {(() => {
+            const correlatable = recentWallets.filter(
+              (e): e is typeof e & { chain: "BTC" | "ETH" | "TRON" } =>
+                e.chain === "BTC" || e.chain === "ETH" || e.chain === "TRON",
+            );
+            return correlatable.length === 0 ? (
+              <p
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "0.6rem",
+                  color: "var(--color-muted-foreground)",
+                }}
+              >
+                No wallets searched yet this session.
+              </p>
+            ) : (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+                {correlatable.map((entry) => (
+                  <button
+                    key={`${entry.chain}:${entry.address}`}
+                    onClick={() => handlePreset(entry.address, entry.chain)}
+                    style={{
+                      padding: "0.28rem 0.65rem",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "0.6rem",
+                      background:
+                        wallet === entry.address && chain === entry.chain
+                          ? "oklch(0.83 0.14 205 / 12%)"
+                          : "var(--bg-2)",
+                      border: `1px solid ${wallet === entry.address && chain === entry.chain ? "var(--color-accent)" : "var(--border-strong)"}`,
+                      borderRadius: "2px",
+                      color:
+                        wallet === entry.address && chain === entry.chain
+                          ? "var(--color-accent)"
+                          : "var(--color-muted-foreground)",
+                      cursor: "pointer",
+                      letterSpacing: "0.04em",
+                      transition: "all 0.12s",
+                    }}
+                  >
+                    {truncateAddress(entry.address)}
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       </div>
 
       {/* ── Empty state ── */}
       {!wallet && (
         <div
+          className="ug-surface"
           style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 360px",
-            gap: "0.75rem",
-            alignItems: "start",
+            padding: "2rem 1.25rem",
+            textAlign: "center",
+            color: "var(--color-muted-foreground)",
           }}
         >
-          {/* Explainer graph */}
-          <div className="ug-surface" style={{ overflow: "hidden" }}>
-            <div className="ug-panel-header">
-              <span className="ug-section-title" style={{ marginBottom: 0 }}>
-                How it works
-              </span>
-            </div>
-            <div style={{ padding: "1.5rem", height: 240 }}>
-              <svg
-                viewBox="0 0 600 360"
-                style={{ width: "100%", height: "100%" }}
-              >
-                {CV_EDGES.map((e, i) => {
-                  const a = CV_NODES.find((n) => n.id === e.from)!;
-                  const b = CV_NODES.find((n) => n.id === e.to)!;
-                  return (
-                    <line
-                      key={i}
-                      x1={a.x}
-                      y1={a.y}
-                      x2={b.x}
-                      y2={b.y}
-                      stroke="oklch(0.83 0.14 205 / 30%)"
-                      strokeWidth={1.5}
-                      strokeDasharray="4 3"
-                    />
-                  );
-                })}
-                {CV_NODES.map((n) => {
-                  const col = NODE_C[n.type] ?? "var(--color-muted-foreground)";
-                  return (
-                    <g key={n.id}>
-                      <rect
-                        x={n.x - 12}
-                        y={n.y - 12}
-                        width={24}
-                        height={24}
-                        transform={`rotate(45,${n.x},${n.y})`}
-                        fill={`${col.slice(0, -1)} / 12%)`}
-                        stroke={col}
-                        strokeWidth={1.5}
-                      />
-                      <text
-                        x={n.x}
-                        y={n.y + 30}
-                        textAnchor="middle"
-                        style={{
-                          fontFamily: "var(--font-mono)",
-                          fontSize: 9,
-                          fill: "var(--color-muted-foreground)",
-                          letterSpacing: "0.08em",
-                        }}
-                      >
-                        {n.label}
-                      </text>
-                    </g>
-                  );
-                })}
-              </svg>
-            </div>
-            <div style={{ padding: "0 1.25rem 1.25rem" }}>
-              <p
-                style={{
-                  fontSize: "0.78rem",
-                  color: "var(--color-muted-foreground)",
-                  lineHeight: 1.7,
-                }}
-              >
-                Multiple victims independently file complaints — each points to
-                the same wallet cluster. Argus links them automatically and
-                shows the full picture: how many people were targeted, across
-                which states, and how much is at risk.
-              </p>
-            </div>
-          </div>
-
-          {/* Steps */}
-          <div className="ug-surface" style={{ overflow: "hidden" }}>
-            <div className="ug-panel-header">
-              <span className="ug-section-title" style={{ marginBottom: 0 }}>
-                What you get
-              </span>
-            </div>
-            <div style={{ padding: "0.75rem 1.25rem 1.25rem" }}>
-              {[
-                {
-                  n: "01",
-                  title: "Victim count",
-                  body: "Total unique victims linked to the same wallet or cluster.",
-                },
-                {
-                  n: "02",
-                  title: "Complaint correlation",
-                  body: "Each NCRP complaint matched by wallet address, amounts, and timestamps.",
-                },
-                {
-                  n: "03",
-                  title: "Geographic spread",
-                  body: "State-by-state breakdown showing scale of the fraud operation.",
-                },
-                {
-                  n: "04",
-                  title: "Signal strength",
-                  body: "HIGH / MEDIUM / LOW — how confident the correlation is.",
-                },
-                {
-                  n: "05",
-                  title: "One-click investigation",
-                  body: "Jump straight to the full trace from any linked complaint.",
-                },
-              ].map(({ n, title, body }) => (
-                <div
-                  key={n}
-                  style={{
-                    display: "flex",
-                    gap: "0.75rem",
-                    paddingBottom: "0.85rem",
-                    marginBottom: "0.85rem",
-                    borderBottom:
-                      n !== "05" ? "1px solid var(--border-subtle)" : "none",
-                  }}
-                >
-                  <span
-                    style={{
-                      fontFamily: "var(--font-mono)",
-                      fontSize: "0.58rem",
-                      color: "var(--color-accent)",
-                      flexShrink: 0,
-                      letterSpacing: "0.1em",
-                      paddingTop: "0.1rem",
-                    }}
-                  >
-                    {n}
-                  </span>
-                  <div>
-                    <p
-                      style={{
-                        fontSize: "0.76rem",
-                        fontWeight: 600,
-                        color: "var(--color-foreground)",
-                        marginBottom: "0.2rem",
-                      }}
-                    >
-                      {title}
-                    </p>
-                    <p
-                      style={{
-                        fontFamily: "var(--font-mono)",
-                        fontSize: "0.62rem",
-                        color: "var(--color-muted-foreground)",
-                        lineHeight: 1.55,
-                      }}
-                    >
-                      {body}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <p
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.62rem",
+              letterSpacing: "0.2em",
+              textTransform: "uppercase",
+            }}
+          >
+            No wallet searched
+          </p>
+          <p style={{ fontSize: "0.76rem", marginTop: "0.4rem" }}>
+            Paste an address above to correlate it against filed complaints.
+          </p>
         </div>
       )}
 
-      {/* ── Loading / offline states (wallet searched, no result yet) ── */}
+      {/* ── Loading / offline / not-found states (wallet searched, no signal yet) ── */}
       {wallet && !sig && (
         <div className="ug-surface" style={{ padding: "1rem 1.25rem", marginBottom: "0.75rem" }}>
-          {loading && !error && (
+          {loading && !error && !notFound && (
             <p style={{ fontFamily: "var(--font-mono)", fontSize: "0.62rem", color: "var(--color-muted-foreground)" }}>
               Correlating…
+            </p>
+          )}
+          {/* A wallet the system has never seen is a real, honest outcome —
+              not a backend failure. Previously this fell through to a flash
+              of empty bordered surface with no explanation on the first
+              render tick before the 404 was even reflected. */}
+          {notFound && !loading && (
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: "0.68rem", color: "var(--color-muted-foreground)", lineHeight: 1.7 }}>
+              No complaints reference this wallet. It may be uninvolved, or
+              simply not yet reported — a correlation signal only exists once
+              at least one complaint names the address.
             </p>
           )}
           <BackendOfflineBanner error={error} context="cross-victim correlation" />
@@ -560,11 +453,11 @@ function CrossVictim() {
                 <div
                   key={c.id}
                   onClick={() => {
-                    if (!wallet) return;
-                    // A complaint's own id isn't a Case id — only set what's
-                    // real: the wallet this correlation was run against.
-                    setActiveWallet(wallet, chain);
-                    navigate({ to: "/dashboard/investigation" });
+                    if (wallet) setActiveWallet(wallet, chain);
+                    navigate({
+                      to: "/dashboard/complaints/$id",
+                      params: { id: c.id },
+                    });
                   }}
                   style={{
                     display: "grid",
@@ -647,7 +540,7 @@ function CrossVictim() {
               ))}
             </div>
 
-            {/* ── Right column ── */}
+            {/* ── Right column: Intelligence panel ── */}
             <div
               style={{
                 display: "flex",
@@ -655,83 +548,198 @@ function CrossVictim() {
                 gap: "0.75rem",
               }}
             >
-              {/* Signal card */}
-              <div
-                className="ug-surface ug-surface--critical"
-                style={{ overflow: "hidden" }}
-              >
-                <div className="ug-panel-header">
-                  <span
-                    className="ug-section-title"
-                    style={{ marginBottom: 0 }}
-                  >
-                    Correlation Signal
-                  </span>
-                  <span
-                    style={{
-                      fontFamily: "var(--font-mono)",
-                      fontSize: "0.64rem",
-                      color: sigColor,
-                      fontWeight: 700,
-                      letterSpacing: "0.12em",
-                    }}
-                  >
-                    {sig.signalStrength}
-                  </span>
-                </div>
-                <div style={{ padding: "0.75rem 1.25rem 1rem" }}>
-                  <p
-                    style={{
-                      fontFamily: "var(--font-mono)",
-                      fontSize: "0.6rem",
-                      color: "var(--color-accent)",
-                      marginBottom: "0.75rem",
-                      wordBreak: "break-all",
-                      letterSpacing: "0.04em",
-                    }}
-                  >
-                    {sig.wallet}
-                  </p>
-                  {[
-                    { k: "Victims", v: String(sig.victims) },
-                    { k: "Complaints", v: String(sig.complaints) },
-                    { k: "States", v: String(sig.states) },
-                    { k: "Funds at Risk", v: sig.totalFundsAtRisk },
-                    { k: "Days Active", v: `${daysActive}d` },
-                  ].map(({ k, v }) => (
-                    <div key={k} className="ug-data-row">
-                      <span className="ug-data-row__key">{k}</span>
-                      <span
-                        className="ug-data-row__value"
+              {(() => {
+                const geoStates = Array.from(
+                  new Set(
+                    linkedComplaints
+                      .map((c) => c.state)
+                      .filter((s): s is string => !!s),
+                  ),
+                );
+
+                const rows: { n: string; label: string; body: React.ReactNode }[] = [
+                  {
+                    n: "01",
+                    label: "Victim Count",
+                    body:
+                      sig.victims > 0 ? (
+                        `${sig.victims} linked victim${sig.victims === 1 ? "" : "s"}`
+                      ) : (
+                        <em>NO MATCHES</em>
+                      ),
+                  },
+                  {
+                    n: "02",
+                    label: "Complaint Correlation",
+                    body:
+                      sig.complaints > 0 ? (
+                        <>
+                          {sig.complaints} matching complaint
+                          {sig.complaints === 1 ? "" : "s"}
+                          <br />
+                          <span style={{ opacity: 0.7 }}>
+                            Address · amount · timestamp
+                          </span>
+                        </>
+                      ) : (
+                        <em>NO MATCHES — no correlated complaints found</em>
+                      ),
+                  },
+                  {
+                    n: "03",
+                    label: "Geographic Spread",
+                    body:
+                      geoStates.length > 0 ? (
+                        geoStates.join(" · ")
+                      ) : (
+                        <em>NOT ATTRIBUTED — no state on file</em>
+                      ),
+                  },
+                  {
+                    n: "04",
+                    label: "Signal Strength",
+                    body: (
+                      <span style={{ color: sigColor, fontWeight: 700 }}>
+                        {sig.signalStrength}
+                      </span>
+                    ),
+                  },
+                  {
+                    n: "05",
+                    label: "Investigation",
+                    body: (
+                      <button
+                        onClick={handleOpenInvestigation}
                         style={{
+                          background: "none",
+                          border: "none",
+                          padding: 0,
                           fontFamily: "var(--font-mono)",
-                          fontSize: "0.7rem",
+                          fontSize: "0.68rem",
+                          color: "var(--color-accent)",
+                          cursor: "pointer",
                         }}
                       >
-                        {v}
+                        View linked evidence →
+                      </button>
+                    ),
+                  },
+                ];
+
+                return (
+                  <div
+                    className="ug-surface ug-surface--critical"
+                    style={{ overflow: "hidden" }}
+                  >
+                    <div className="ug-panel-header">
+                      <span
+                        className="ug-section-title"
+                        style={{ marginBottom: 0 }}
+                      >
+                        Intelligence
                       </span>
                     </div>
-                  ))}
-
-                  {/* Signal strength bar */}
-                  <div style={{ marginTop: "0.75rem" }}>
-                    <div className="ug-risk-bar">
-                      <div
-                        className="ug-risk-bar__fill"
+                    <div style={{ padding: "0.4rem 1.25rem 0.4rem" }}>
+                      <p
                         style={{
-                          width:
-                            sig.signalStrength === "HIGH"
-                              ? "88%"
-                              : sig.signalStrength === "MEDIUM"
-                                ? "55%"
-                                : "25%",
-                          background: sigColor,
+                          fontFamily: "var(--font-mono)",
+                          fontSize: "0.6rem",
+                          color: "var(--color-accent)",
+                          margin: "0.5rem 0 0.75rem",
+                          wordBreak: "break-all",
+                          letterSpacing: "0.04em",
                         }}
-                      />
+                      >
+                        {sig.wallet}
+                      </p>
+                      {rows.map(({ n, label, body }, i) => (
+                        <div
+                          key={n}
+                          style={{
+                            display: "flex",
+                            gap: "0.65rem",
+                            padding: "0.65rem 0",
+                            borderTop:
+                              i === 0 ? "none" : "1px solid var(--border-subtle)",
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontFamily: "var(--font-mono)",
+                              fontSize: "0.58rem",
+                              color: "var(--color-muted-foreground)",
+                              flexShrink: 0,
+                              letterSpacing: "0.1em",
+                              paddingTop: "0.1rem",
+                            }}
+                          >
+                            {n}
+                          </span>
+                          <div style={{ minWidth: 0 }}>
+                            <p
+                              style={{
+                                fontFamily: "var(--font-mono)",
+                                fontSize: "0.54rem",
+                                letterSpacing: "0.18em",
+                                textTransform: "uppercase",
+                                color: "var(--color-muted-foreground)",
+                                marginBottom: "0.25rem",
+                              }}
+                            >
+                              {label}
+                            </p>
+                            <div
+                              style={{
+                                fontSize: "0.76rem",
+                                color: "var(--color-foreground)",
+                                lineHeight: 1.5,
+                              }}
+                            >
+                              {body}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                      <div
+                        style={{
+                          marginTop: "0.5rem",
+                          paddingTop: "0.65rem",
+                          borderTop: "1px solid var(--border-subtle)",
+                        }}
+                      >
+                        <div className="ug-data-row">
+                          <span className="ug-data-row__key">Funds at Risk</span>
+                          <span
+                            className="ug-data-row__value"
+                            style={{ fontFamily: "var(--font-mono)", fontSize: "0.7rem" }}
+                          >
+                            {sig.totalFundsAtRisk}
+                          </span>
+                        </div>
+                        <div className="ug-data-row">
+                          <span className="ug-data-row__key">Days Active</span>
+                          <span
+                            className="ug-data-row__value"
+                            style={{ fontFamily: "var(--font-mono)", fontSize: "0.7rem" }}
+                          >
+                            {daysActive}d
+                          </span>
+                        </div>
+                        <div className="ug-risk-bar" style={{ marginTop: "0.6rem" }}>
+                          <div
+                            className="ug-risk-bar__fill"
+                            style={{
+                              width: `${Math.round(sig.correlationScore * 100)}%`,
+                              background: sigColor,
+                            }}
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
+                );
+              })()}
 
               {/* Backend offline notice */}
               {error && (

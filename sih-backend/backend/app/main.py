@@ -35,6 +35,7 @@ from app.api.v1.routers.check_wallet import router as check_wallet_router
 from app.api.v1.routers.cases import router as cases_router
 from app.api.v1.routers.alerts import router as alerts_router
 from app.api.v1.routers.engine import anchors_router, engine_router
+from app.api.v1.routers.scenarios import router as scenarios_router
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -62,8 +63,14 @@ async def lifespan(app: FastAPI):
             )
     yield
     # Shutdown
+    from app.services.explorers import http_client
+
     await close_driver()
     await registry_service.close_redis()
+    # The explorers share one pooled, keep-alive HTTP client (they used to build
+    # a fresh one per request, paying a TLS handshake on every traced address).
+    # Closing it here releases the sockets cleanly instead of on process exit.
+    await http_client.aclose()
     logger.info("argus_shutdown")
 
 
@@ -237,6 +244,7 @@ app.include_router(wallets_router, prefix=V1)
 app.include_router(correlate_router, prefix=V1)
 app.include_router(cases_router, prefix=V1)
 app.include_router(alerts_router, prefix=V1)
+app.include_router(scenarios_router, prefix=V1)
 
 # ARGUS v2 provenance engine (additive — see ARGUS-ENGINE-V2.md).
 # anchors_router -> /api/v1/anchors, engine_router -> /api/v1/engine/*

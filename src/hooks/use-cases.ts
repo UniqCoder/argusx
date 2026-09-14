@@ -40,8 +40,14 @@ function mapCase(c: Case): InvestigationCase {
     reportedWallet: wallet?.address ?? "",
     traceStatus: STATUS_MAP[c.status] ?? "live-trace",
     networkSignal: "NONE",
+    // Kept to 2 decimal places for the same reason risk.tsx and
+    // investigation.tsx do — see formatRiskScore in use-wallet.ts. null (not
+    // a fabricated 0) when the linked wallet was never scored.
     riskScore:
-      wallet?.risk_score != null ? Math.round(wallet.risk_score * 100) : 0,
+      wallet?.risk_score != null
+        ? Math.round(wallet.risk_score * 100 * 100) / 100
+        : null,
+    riskTier: wallet?.risk_tier ?? null,
     victimCount: 0,
     lastActivity: new Date(c.opened_at).toLocaleDateString("en-IN"),
     description: `Case opened by ${c.assigned_investigator ?? "unassigned"}. Status: ${c.status}.`,

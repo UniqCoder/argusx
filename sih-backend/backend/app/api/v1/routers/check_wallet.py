@@ -61,7 +61,7 @@ async def check_wallet(
             },
         )
 
-    score, action, case_ref = await registry_service.check_wallet_hot_path(
+    score, action, case_ref, reason, tier = await registry_service.check_wallet_hot_path(
         redis_client=redis_client,
         chain=body.chain.value,
         address=body.address,
@@ -101,4 +101,6 @@ async def check_wallet(
         risk_score=score,
         action=action,
         case_ref=case_ref,
+        reason=reason,
+        risk_tier=tier,
     )

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useNavigate } from "@tanstack/react-router";
 import { useHealth } from "@/hooks/use-health";
+import { useSessionStore } from "@/store/session-store";
 
 export const Route = createFileRoute("/dashboard/settings")({
   component: Settings,
@@ -12,6 +13,7 @@ function Settings() {
   const [signingOut, setSigningOut] = useState(false);
   const navigate = useNavigate();
   const { health, error: healthError } = useHealth();
+  const email = useSessionStore((s) => s.email);
 
   const services: { label: string; ok: boolean; status: string }[] = health
     ? [
@@ -87,7 +89,7 @@ function Settings() {
                 fontSize: "1.1rem",
               }}
             >
-              ðŸ”
+              🔍
             </div>
             <div>
               <p
@@ -97,7 +99,7 @@ function Settings() {
                   color: "var(--color-foreground)",
                 }}
               >
-                Investigator
+                {email ?? "Investigator"}
               </p>
               <p
                 style={{
@@ -111,11 +113,14 @@ function Settings() {
             </div>
           </div>
           <div className="ug-divider" />
+          {/* Role/Unit/Clearance removed — the backend has no real
+              multi-user auth yet (every account maps to one shared dev
+              identity; see the comment in session-store.ts), so those were
+              hardcoded strings with no real data behind them. Only show
+              what's actually true of this session. */}
           <div>
             {[
-              { k: "Role", v: "Senior Investigator" },
-              { k: "Unit", v: "Cyber Crime Division" },
-              { k: "Clearance", v: "Level 3" },
+              { k: "Email", v: email ?? "Unknown" },
               { k: "Session", v: "Active" },
             ].map(({ k, v }) => (
               <div key={k} className="ug-data-row">
@@ -187,67 +192,6 @@ function Settings() {
               </div>
             ))}
           </div>
-          <div className="ug-divider" />
-          <div style={{ display: "flex", gap: "0.5rem" }}>
-            <div
-              style={{
-                flex: 1,
-                background: "oklch(0.09 0.015 258)",
-                border: "1px solid var(--color-border)",
-                borderRadius: "0.4rem",
-                padding: "0.65rem 0.85rem",
-              }}
-            >
-              <p
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "0.58rem",
-                  color: "var(--color-muted-foreground)",
-                  marginBottom: "0.15rem",
-                }}
-              >
-                Version
-              </p>
-              <p
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "0.72rem",
-                  color: "var(--color-accent)",
-                }}
-              >
-                2026.08-r4
-              </p>
-            </div>
-            <div
-              style={{
-                flex: 1,
-                background: "oklch(0.09 0.015 258)",
-                border: "1px solid var(--color-border)",
-                borderRadius: "0.4rem",
-                padding: "0.65rem 0.85rem",
-              }}
-            >
-              <p
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "0.58rem",
-                  color: "var(--color-muted-foreground)",
-                  marginBottom: "0.15rem",
-                }}
-              >
-                Environment
-              </p>
-              <p
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "0.72rem",
-                  color: "var(--color-foreground)",
-                }}
-              >
-                Production
-              </p>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -293,7 +237,7 @@ function Settings() {
               flexShrink: 0,
             }}
           >
-            {signingOut ? "Signing outâ€¦" : "Sign Out â†’"}
+            {signingOut ? "Signing out…" : "Sign Out →"}
           </button>
         </div>
       </div>

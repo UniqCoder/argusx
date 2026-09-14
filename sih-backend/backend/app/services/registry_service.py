@@ -98,7 +98,13 @@ async def set_risk_entry(
     client = redis_client if redis_client is not None else get_redis_client()
     key = format_risk_key(chain, address)
     payload = {
-        "score": round(score, 3),
+        # 4 decimal places — matching app/services/risk_service.py's own
+        # rounding precision exactly. This used to round to 3, silently
+        # truncating the canonical score by up to 0.0005 on every write:
+        # /check-wallet (Deposit Watch) reads ONLY this registry, so a
+        # precision mismatch here was a real, reproducible source of the
+        # same wallet showing two different numbers on two screens.
+        "score": round(score, 4),
         "tier": tier.value if isinstance(tier, RiskTier) else tier,
         "case_ref": case_ref,
         "flagged_at": datetime.now(timezone.utc).isoformat(),
@@ -139,20 +145,32 @@ async def check_wallet_hot_path(
     chain: str,
     address: str,
     amount: float,
-) -> Tuple[float, AlertAction, Optional[str]]:
+) -> Tuple[float, AlertAction, Optional[str], Optional[str], Optional[str]]:
     """
     Latency-critical hot path for VASP deposits.
     Single Redis GET lookup. Never blocks on Postgres or Neo4j.
-    Returns: (risk_score, action, case_ref)
+    Returns: (risk_score, action, case_ref, reason, tier)
+
+    `reason` is the human-readable basis for the entry, when one was recorded
+    (the sanctions seed and the seeded scenarios both carry one in
+    `designation.reason`). Deposit Watch used to show a bare number with no
+    way to say why -- this is what lets it cite something instead of asking
+    the investigator to trust a score.
+
+    `tier` is the SAME risk_tier string Risk Intelligence shows for this
+    wallet (this registry entry is written by risk_service.py's own
+    write-through) — Deposit Watch's color coding must key off this, never
+    re-derive its own thresholds from the raw score.
     """
     entry = await get_risk_entry(redis_client, chain, address)
     if not entry:
         # Default for unflagged addresses
-        return 0.0, AlertAction.allow, None
+        return 0.0, AlertAction.allow, None, None, None
 
     score = float(entry.get("score", 0.0))
     tier_str = entry.get("tier")
     case_ref = entry.get("case_ref")
     action = determine_action(score, tier_str)
+    reason = (entry.get("designation") or {}).get("reason")
 
-    return score, action, case_ref
+    return score, action, case_ref, reason, tier_str

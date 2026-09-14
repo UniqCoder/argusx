@@ -3,13 +3,15 @@ app/services/explorers/btc_explorer.py — Bitcoin Blockchain Explorer Integrati
 
 Uses Blockstream Esplora API (with Mempool.space fallback) to fetch live UTXO transactions.
 """
+from __future__ import annotations
+
+import asyncio
 from datetime import datetime, timezone
 import logging
 from typing import List
 
-import httpx
-
 from app.schemas.common import Chain
+from app.services.explorers import http_client
 from app.services.explorers.base import BlockchainExplorer, ExplorerUnavailableError, RawTx
 from app.services.explorers.known_vasps import lookup_known_vasp
 
@@ -17,6 +19,12 @@ logger = logging.getLogger(__name__)
 
 PRIMARY_ESPLORA = "https://blockstream.info/api"
 FALLBACK_ESPLORA = "https://mempool.space/api"
+
+# Bounded single retry for TRANSIENT failures only (transport errors /
+# timeouts). 429 falls through to the next endpoint by design (that IS the
+# retry), and a 404 from a live endpoint is a definitive answer, not a
+# failure. ~1s backoff keeps the worst case bounded.
+_RETRY_BACKOFF_SECONDS = 1.0
 
 
 class BitcoinExplorer(BlockchainExplorer):
@@ -36,18 +44,28 @@ class BitcoinExplorer(BlockchainExplorer):
         for base_url in endpoints:
             url = f"{base_url}/address/{addr}/txs"
             try:
-                async with httpx.AsyncClient(timeout=self.timeout) as client:
-                    resp = await client.get(url, headers=headers)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        return self._parse_esplora_txs(addr, data, limit)
-                    elif resp.status_code == 404:
-                        logger.info("btc_address_not_found", extra={"address": addr})
-                        return []
-                    elif resp.status_code == 429:
-                        logger.warning("btc_explorer_rate_limited", extra={"base_url": base_url, "address": addr})
+                resp = await http_client.get(url, headers=headers, timeout=self.timeout)
+                if resp.status_code == 200:
+                    return self._parse_esplora_txs(addr, resp.json(), limit)
+                elif resp.status_code == 404:
+                    logger.info("btc_address_not_found", extra={"address": addr})
+                    return []
+                elif resp.status_code == 429:
+                    logger.warning("btc_explorer_rate_limited", extra={"base_url": base_url, "address": addr})
             except Exception as e:
                 logger.warning("btc_explorer_request_failed", extra={"base_url": base_url, "error": str(e)})
+                # One bounded retry against the SAME endpoint for transient
+                # transport failures (timeout / connection reset) before
+                # falling through to the fallback provider.
+                try:
+                    await asyncio.sleep(_RETRY_BACKOFF_SECONDS)
+                    resp = await http_client.get(url, headers=headers, timeout=self.timeout)
+                    if resp.status_code == 200:
+                        return self._parse_esplora_txs(addr, resp.json(), limit)
+                    if resp.status_code == 404:
+                        return []
+                except Exception:
+                    pass
 
         logger.error("all_btc_explorers_failed", extra={"address": addr})
         raise ExplorerUnavailableError(f"All BTC explorer endpoints failed for {addr}")
@@ -93,6 +111,7 @@ class BitcoinExplorer(BlockchainExplorer):
                             amount=amount_btc,
                             chain=Chain.BTC,
                             timestamp=ts,
+                            asset="BTC",
                             vasp_tag=vasp_tag,
                         )
                     )

@@ -18,7 +18,7 @@ Rules:
 from typing import Optional
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.complaint import Complaint, ComplaintWallet
@@ -54,12 +54,29 @@ async def correlate_wallet(
     Returns None if wallet is not found.
     """
     # 1. Resolve wallet
+    #
+    # By address+chain, matched CASE-INSENSITIVELY: EVM addresses are
+    # case-insensitive on-chain, and a checksummed paste vs. a lowercase paste
+    # of the same wallet were previously treated as two different wallets --
+    # silently returning zero correlation for a wallet that in fact had
+    # linked complaints, just filed under a different-cased address.
+    #
+    # `Wallet.chain == request.chain.value if request.chain else None` used to
+    # be Python operator precedence, not a guarded WHERE clause: it evaluated
+    # to `.where(addr == x, None)` whenever chain was omitted. The Pydantic
+    # validator on CorrelateRequest requires chain alongside address today, so
+    # this could not fire in practice -- but it is a latent trap for the first
+    # future caller that relaxes that validator.
     if request.wallet_id is not None:
         wallet_stmt = select(Wallet).where(Wallet.id == request.wallet_id)
+    elif request.chain is not None:
+        wallet_stmt = select(Wallet).where(
+            func.lower(Wallet.address) == request.address.strip().lower(),
+            Wallet.chain == request.chain.value,
+        )
     else:
         wallet_stmt = select(Wallet).where(
-            Wallet.address == request.address,
-            Wallet.chain == request.chain.value if request.chain else None,
+            func.lower(Wallet.address) == request.address.strip().lower(),
         )
 
     wallet_res = await db.execute(wallet_stmt)
