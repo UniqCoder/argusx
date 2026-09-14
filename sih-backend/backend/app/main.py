@@ -232,13 +232,18 @@ async def health_check() -> dict[str, Any]:
         logger.warning("health_redis_down", extra={"error": str(e)})
         service_status["redis"] = "down"
 
-    # Neo4j
+    # Neo4j. 5s, not 1s — a hosted instance (e.g. Neo4j Aura) is a real
+    # network round-trip with a TLS+bolt handshake, not the same-network
+    # container-to-container hop the 1s budget was tuned for.
     try:
         from app.graph.neo4j_client import run_query
-        await asyncio.wait_for(run_query("RETURN 1 AS ok"), timeout=1.0)
+        await asyncio.wait_for(run_query("RETURN 1 AS ok"), timeout=5.0)
         service_status["neo4j"] = "ok"
     except Exception as e:
-        logger.warning("health_neo4j_down", extra={"error": str(e)})
+        # `extra={"error": ...}` wasn't reliably surfacing through the
+        # structlog/stdlib bridge in production — put it in the event
+        # string itself so it's never silently swallowed.
+        logger.warning(f"health_neo4j_down: {type(e).__name__}: {e}")
         service_status["neo4j"] = "down"
 
     overall = "ok" if all(v == "ok" for v in service_status.values()) else "degraded"
