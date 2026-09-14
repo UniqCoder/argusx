@@ -86,6 +86,19 @@ def _dust_for(asset: Optional[str], chain: str) -> float:
         return 0.0
     return DUST_THRESHOLD.get(chain, 0.0)
 
+
+NATIVE_TICKER: dict[str, str] = {"ETH": "ETH", "BTC": "BTC", "TRON": "TRX"}
+
+
+def _recognized_assets(chain: str) -> set[str]:
+    """
+    The asset universe ARGUS actually has a dust floor and evidentiary story
+    for: the chain's native coin plus the major stablecoins/wrapped assets in
+    ASSET_DUST_THRESHOLD. Used to pick which asset a trace follows without
+    that choice being hijacked by an unsolicited spam-token airdrop.
+    """
+    return {*ASSET_DUST_THRESHOLD.keys(), NATIVE_TICKER.get(chain, chain)}
+
 # How many "branch left unresolved" markers may be emitted when the node
 # budget runs out with money still moving. Reserved out of max_nodes rather
 # than added on top of it, so max_nodes is a real cap.
@@ -493,14 +506,31 @@ async def propagate_taint(
         # task-fraud wallet that is typically USDT, not the native coin.
         if item.hop == 0 and asset is None:
             _self0 = item.address.strip().lower()
+            recognized = _recognized_assets(anchor_chain)
             inflow_by_asset: dict[str, float] = {}
             for tx in txs:
                 if tx.to_address and tx.to_address.strip().lower() == _self0:
                     key_asset = tx.asset or anchor_chain
                     inflow_by_asset[key_asset] = inflow_by_asset.get(key_asset, 0.0) + tx.amount
-            if inflow_by_asset:
-                asset = max(inflow_by_asset.items(), key=lambda kv: kv[1])[0]
+            # Rank only recognized assets (native coin + major stablecoins/
+            # wrapped assets) first. Unsolicited "airdrop"/dust-spam tokens —
+            # a routine address-poisoning tactic against any well-known wallet
+            # — mint themselves in arbitrary, often huge, nominal quantities
+            # with a made-up ticker. Ranking by raw inflow amount across ALL
+            # tickers let one spam token outrank real ETH/USDT activity and
+            # get chosen as "the" asset to trace, at which point a wallet that
+            # never sends that spam token back out falsely reported
+            # NO_OUTFLOW even while genuinely moving money in other assets.
+            # Only fall back to the full (unrecognized-inclusive) ranking when
+            # nothing recognized was received at all, so a case that genuinely
+            # is about an obscure token can still trace.
+            recognized_inflow = {a: v for a, v in inflow_by_asset.items() if a in recognized}
+            if recognized_inflow:
+                asset = max(recognized_inflow.items(), key=lambda kv: kv[1])[0]
                 asset_basis = "dominant_inflow"
+            elif inflow_by_asset:
+                asset = max(inflow_by_asset.items(), key=lambda kv: kv[1])[0]
+                asset_basis = "dominant_inflow_unrecognized_asset"
             else:
                 # Nothing received in the window — fall back to the dominant
                 # OUTGOING asset so a send-only wallet still traces.
@@ -509,8 +539,10 @@ async def propagate_taint(
                     if tx.from_address and tx.from_address.strip().lower() == _self0:
                         key_asset = tx.asset or anchor_chain
                         outflow_by_asset[key_asset] = outflow_by_asset.get(key_asset, 0.0) + tx.amount
-                if outflow_by_asset:
-                    asset = max(outflow_by_asset.items(), key=lambda kv: kv[1])[0]
+                recognized_outflow = {a: v for a, v in outflow_by_asset.items() if a in recognized}
+                ranked_outflow = recognized_outflow or outflow_by_asset
+                if ranked_outflow:
+                    asset = max(ranked_outflow.items(), key=lambda kv: kv[1])[0]
                     asset_basis = "dominant_outflow"
                 else:
                     asset = anchor_chain

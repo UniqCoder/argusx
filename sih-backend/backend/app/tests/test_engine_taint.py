@@ -160,3 +160,57 @@ async def test_propagate_taint_respects_max_hops():
     )
     assert len(result.nodes) == 1
     assert result.nodes[0].terminal_kind == "DEPTH_LIMIT"
+
+
+# ── Asset selection must not be hijacked by spam-token airdrops ─────────────────
+
+ETH_ANCHOR = "0xEthAnchor"
+ETH_NEXT = "0xEthNext"
+
+
+@pytest.mark.asyncio
+async def test_asset_selection_ignores_dust_spam_airdrop(monkeypatch):
+    """
+    Real-world regression: a well-known/sanctioned wallet is regularly spammed
+    with unsolicited "airdrop" tokens whose contracts mint themselves an
+    arbitrary, often huge, nominal quantity (address poisoning). Ranking
+    dominant inflow by raw amount across every ticker let one such spam token
+    (millions of "units" of a token nobody asked for and the wallet never
+    sends back out) outrank a modest but real ETH inflow/outflow — the engine
+    then followed the spam token, found it never moves, and reported the
+    whole wallet as NO_OUTFLOW even though it was actively forwarding ETH.
+    """
+    canned = [
+        # A spam airdrop: huge nominal quantity, one-directional (never sent
+        # back out), arbitrary made-up ticker.
+        RawTx(
+            tx_hash="spam1", from_address="0xAirdropper", to_address=ETH_ANCHOR,
+            amount=92_000_000.0, chain=Chain.ETH, timestamp=_NOW, asset="SCAT",
+        ),
+        # The real money: a modest ETH inflow that the wallet forwards on.
+        RawTx(
+            tx_hash="real_in", from_address="0xVictim", to_address=ETH_ANCHOR,
+            amount=2.0, chain=Chain.ETH, timestamp=_NOW, asset="ETH",
+        ),
+        RawTx(
+            tx_hash="real_out", from_address=ETH_ANCHOR, to_address=ETH_NEXT,
+            amount=1.9, chain=Chain.ETH, timestamp=_NOW, asset="ETH",
+        ),
+    ]
+
+    async def _fake_eth_get_transactions(address: str, limit: int = 25) -> list[RawTx]:
+        if address == ETH_ANCHOR:
+            return canned
+        return []
+
+    monkeypatch.setattr(taint_module._eth, "get_transactions", _fake_eth_get_transactions)
+
+    result = await propagate_taint(
+        anchor_address=ETH_ANCHOR, anchor_chain="ETH", anchor_taint_value=None,
+        method=TaintMethod.haircut, max_hops=5, max_nodes=20, dilution_floor=0.001,
+    )
+
+    assert result.asset == "ETH"
+    anchor_node = next(n for n in result.nodes if n.address == ETH_ANCHOR)
+    assert anchor_node.terminal_kind != "NO_OUTFLOW"
+    assert any(n.address == ETH_NEXT for n in result.nodes)
