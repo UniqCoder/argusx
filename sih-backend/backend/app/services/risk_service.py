@@ -55,6 +55,16 @@ RISK_FLAG_THRESHOLD = 0.70
 COMPLAINT_BONUS = {0: 0.0, 1: 0.05, 2: 0.15}
 COMPLAINT_BONUS_MAX = 0.30  # 3 or more complaints
 
+# The combined ceiling on how much the complaint + mixer + typology bonuses
+# may add to ml_score TOGETHER. Each one alone is reasonable (0.05-0.30), but
+# summed independently they could reach 0.80 — enough to push almost any
+# ml_score to the 1.0 clamp, producing a flat, meaningless-looking 100/100
+# regardless of what the model actually found. Reaching CRITICAL should still
+# require either an official sanctions match or the behavioral model's own
+# score contributing real weight, not corroboration bonuses alone stacking
+# to the ceiling. See the scaling logic in evaluate_wallet_risk.
+EXTRA_EVIDENCE_BONUS_CAP = 0.35
+
 
 def complaint_corroboration_bonus(complaint_count: int) -> float:
     return COMPLAINT_BONUS.get(complaint_count, COMPLAINT_BONUS_MAX)
@@ -364,25 +374,50 @@ async def evaluate_wallet_risk(
         )
         evidence = explain_wallet_risk(model_vector, top_k=max(1, 5 - extra_evidence_slots))
 
-        # Complaint corroboration is additive — real evidence the model can't
-        # see, not a floor like sanctions. Applied to the behavioral score
-        # BEFORE the sanctions floor, so a sanctioned address that also has
-        # complaint corroboration can still land above the bare 0.95 floor.
-        bonus = complaint_corroboration_bonus(complaint_count)
-        boosted_score = round(min(1.0, ml_score + bonus), 4)
-        # At 3+ complaints, the additive bonus alone is no longer enough to
-        # guarantee this reads as the strong evidence it is — a very low
-        # behavioral score (a fresh, short-lived collector wallet the model
-        # has little to go on for) could still land in MEDIUM despite three
-        # independent victims naming it. Floor it to HIGH, same mechanism as
-        # the sanctions floor above, just one tier down.
+        # ── Corroboration bonuses: complaint + mixer + typology, combined ──
+        # Each of these three signals is real, but they were added to the
+        # score independently, one after another, each re-clamped to 1.0 on
+        # its own. Stack 3+ complaints (+0.30) with mixer exposure (+0.20)
+        # and two laundering patterns (+0.20) on top of even a modest ml_score
+        # and the total blows past 1.0 and clamps to a flat, suspicious-
+        # looking 100/100 — exactly the kind of manufactured-looking ceiling
+        # value this project has otherwise gone out of its way to avoid (see
+        # the sanctions blend below, which floors at 0.95, never hardcodes
+        # 1.0). Fixed by capping the COMBINED additive bonus from these three
+        # non-ML signals together, then scaling each one's displayed
+        # contribution by the same factor so the evidence panel's numbers
+        # always sum to exactly what was actually applied — never a bigger
+        # number quietly discarded by the clamp.
+        raw_bonuses: dict[str, float] = {}
+        if complaint_count > 0:
+            raw_bonuses["complaint"] = complaint_corroboration_bonus(complaint_count)
+        if mixer_exposure:
+            raw_bonuses["mixer"] = MIXER_EXPOSURE_BONUS
+        typo_codes: set[str] = {t["code"] for t in typology_exposure}
+        if typology_exposure:
+            raw_bonuses["typology"] = min(TYPOLOGY_BONUS_MAX, TYPOLOGY_BONUS_PER_CODE * len(typo_codes))
+
+        raw_total = sum(raw_bonuses.values())
+        scale = min(1.0, EXTRA_EVIDENCE_BONUS_CAP / raw_total) if raw_total > 0 else 1.0
+        applied_bonuses = {k: round(v * scale, 4) for k, v in raw_bonuses.items()}
+
+        boosted_score = round(min(1.0, ml_score + sum(applied_bonuses.values())), 4)
+
+        # Floors are a separate, bounded statement ("this evidence alone is
+        # presumptively at least HIGH") — not part of the additive stack, so
+        # they're unaffected by the cap above and can't compound with it.
         if complaint_count >= COMPLAINT_HIGH_FLOOR_COUNT:
             boosted_score = round(max(boosted_score, COMPLAINT_SCORE_FLOOR), 4)
-        if complaint_count > 0:
+        if mixer_exposure:
+            boosted_score = round(max(boosted_score, MIXER_EXPOSURE_SCORE_FLOOR), 4)
+        if len(typo_codes) >= TYPOLOGY_FLOOR_MIN_CODES:
+            boosted_score = round(max(boosted_score, TYPOLOGY_SCORE_FLOOR), 4)
+
+        if "complaint" in applied_bonuses:
             evidence = [
                 RiskEvidence(
                     feature_name="victim_complaint_corroboration",
-                    contribution=bonus,
+                    contribution=applied_bonuses["complaint"],
                     direction=EvidenceDirection.increases_risk,
                     detail=(
                         f"{complaint_count} independent complaint"
@@ -393,39 +428,21 @@ async def evaluate_wallet_risk(
                 ),
                 *evidence,
             ]
-
-        # Mixer exposure is additive too, plus a HIGH floor — see
-        # MIXER_EXPOSURE_BONUS above. Applied after the complaint blend so a
-        # wallet with both signals gets credit for each; before the sanctions
-        # blend so a sanctioned address's mixer trail still shows in the
-        # boosted score the sanctions floor is taken against.
-        if mixer_exposure:
-            boosted_score = round(min(1.0, boosted_score + MIXER_EXPOSURE_BONUS), 4)
-            boosted_score = round(max(boosted_score, MIXER_EXPOSURE_SCORE_FLOOR), 4)
-            hop = mixer_exposure["hop"]
+        if "mixer" in applied_bonuses:
+            hop = mixer_exposure["hop"]  # type: ignore[index]
             evidence = [
                 RiskEvidence(
                     feature_name="mixer_exposure",
-                    contribution=MIXER_EXPOSURE_BONUS,
+                    contribution=applied_bonuses["mixer"],
                     direction=EvidenceDirection.increases_risk,
                     detail=(
-                        f"This wallet's own traced funds reach {mixer_exposure['entity_name']}, "
+                        f"This wallet's own traced funds reach {mixer_exposure['entity_name']}, "  # type: ignore[index]
                         f"a known mixer, {hop} hop{'s' if hop != 1 else ''} downstream."
                     ),
                 ),
                 *evidence,
             ]
-
-        # Laundering-pattern exposure: additive per distinct qualifying code,
-        # capped, plus a HIGH floor once two or more independent patterns
-        # stack together — one pattern alone is real signal but, like one
-        # complaint, not presumptively strong enough by itself.
-        if typology_exposure:
-            codes = {t["code"] for t in typology_exposure}
-            typo_bonus = round(min(TYPOLOGY_BONUS_MAX, TYPOLOGY_BONUS_PER_CODE * len(codes)), 4)
-            boosted_score = round(min(1.0, boosted_score + typo_bonus), 4)
-            if len(codes) >= TYPOLOGY_FLOOR_MIN_CODES:
-                boosted_score = round(max(boosted_score, TYPOLOGY_SCORE_FLOOR), 4)
+        if "typology" in applied_bonuses:
             seen: set[str] = set()
             ordered_labels = []
             for t in typology_exposure:
@@ -435,7 +452,7 @@ async def evaluate_wallet_risk(
             evidence = [
                 RiskEvidence(
                     feature_name="laundering_pattern_exposure",
-                    contribution=typo_bonus,
+                    contribution=applied_bonuses["typology"],
                     direction=EvidenceDirection.increases_risk,
                     detail=(
                         "This wallet's own traced flow exhibits: "
@@ -448,7 +465,7 @@ async def evaluate_wallet_risk(
         corroborated = (
             complaint_count >= 2
             or bool(mixer_exposure)
-            or (bool(typology_exposure) and len({t["code"] for t in typology_exposure}) >= TYPOLOGY_FLOOR_MIN_CODES)
+            or len(typo_codes) >= TYPOLOGY_FLOOR_MIN_CODES
         )
 
         if sanction:
@@ -526,7 +543,7 @@ async def evaluate_wallet_risk(
         shap_top5=shap_top5,
         complaint_count=complaint_count,
         mixer_exposure=mixer_exposure,
-        typology_codes=sorted({t["code"] for t in typology_exposure}),
+        typology_codes=sorted(typo_codes),
         corroborated=corroborated,
         model_version=model_version,
         feature_schema_version=FEATURE_SCHEMA_VERSION,
@@ -564,10 +581,10 @@ async def evaluate_wallet_risk(
                 f"This wallet's own traced funds reach {mixer_exposure['entity_name']} — "
                 "known mixer exposure."
             )
-        elif len({t["code"] for t in typology_exposure}) >= TYPOLOGY_FLOOR_MIN_CODES:
+        elif len(typo_codes) >= TYPOLOGY_FLOOR_MIN_CODES:
             reason = (
                 "This wallet's own traced flow exhibits multiple laundering patterns "
-                f"({', '.join(sorted({t['code'] for t in typology_exposure}))})."
+                f"({', '.join(sorted(typo_codes))})."
             )
         elif complaint_count == 1:
             reason = "1 complaint names this wallet; behavioral model score applied, awaiting further corroboration."
