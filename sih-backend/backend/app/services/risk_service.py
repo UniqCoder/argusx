@@ -136,6 +136,60 @@ async def get_mixer_exposure(db: AsyncSession, address: str, chain: str) -> Opti
     return {"entity_name": row[0], "hop": row[1]}
 
 
+# ── Laundering-pattern (typology) exposure ──────────────────────────────────
+# Layer 2 (app/engine/typologies.py) already names concrete laundering
+# patterns on a wallet's own trace — funds cashed out within minutes of
+# arriving ("consistent with a pre-arranged cash-out", in its own words), one
+# wallet fanning out to a dozen others, an entire chain moving in an
+# implausible few minutes. That file's own docstring is explicit that it
+# never computes a score itself (so it can never touch the decision engine's
+# Class-A-anchor-required block rule — see IMPROVEMENTS_PLANNED.md's
+# rejection of a fused "block" score). But nothing stops the risk score
+# (Layer 4, which can only ever suggest hold_for_review, same ceiling as
+# everything else here) from reading that same real, already-persisted
+# narrative — which it was not doing, so wallets with a textbook rapid
+# cash-out or a fan-out to a dozen mule addresses scored LOW purely because
+# the ML model's own transaction-shape features didn't happen to look
+# unusual. Only the higher-confidence behavioral codes count here — plain
+# multi-hop layering and a bridge crossing are common in legitimate use too
+# and are deliberately left out.
+QUALIFYING_TYPOLOGY_CODES = {
+    "RAPID_TO_EXCHANGE",
+    "RAPID_MOVEMENT",
+    "FAN_OUT",
+    "STRUCTURING",
+    "PEEL_CHAIN",
+    "DORMANT_BURST",
+    "CROSS_VICTIM_CONVERGENCE",
+}
+TYPOLOGY_BONUS_PER_CODE = 0.10
+TYPOLOGY_BONUS_MAX = 0.30
+# Floor kicks in once two independent patterns stack — one alone (like one
+# complaint) is real but not presumptively strong enough on its own.
+TYPOLOGY_FLOOR_MIN_CODES = 2
+TYPOLOGY_SCORE_FLOOR = 0.60
+
+
+async def get_typology_exposure(db: AsyncSession, address: str, chain: str) -> list[dict]:
+    """
+    The qualifying laundering-pattern codes on this wallet's own most recent
+    trace, read straight from the persisted Trace.typologies JSON that
+    app/engine/typologies.py already wrote — not re-detected here, and empty
+    (never fabricated) when no trace has been run for this wallet yet.
+    """
+    stmt = (
+        select(Trace.typologies)
+        .join(Anchor, Anchor.id == Trace.anchor_id)
+        .where(func.lower(Anchor.address) == address.strip().lower(), Anchor.chain == chain)
+        .order_by(Trace.started_at.desc())
+        .limit(1)
+    )
+    row = (await db.execute(stmt)).first()
+    if row is None or not row[0]:
+        return []
+    return [t for t in row[0] if t.get("code") in QUALIFYING_TYPOLOGY_CODES]
+
+
 btc_explorer = BitcoinExplorer()
 eth_explorer = EthereumExplorer()
 tron_explorer = TronExplorer()
@@ -177,6 +231,11 @@ async def evaluate_wallet_risk(
     # Does this wallet's own already-persisted trace reach a known mixer?
     # See MIXER_EXPOSURE_BONUS above for why this matters and how it's used.
     mixer_exposure = await get_mixer_exposure(db, address, chain.value)
+
+    # Does this wallet's own already-persisted trace exhibit a real laundering
+    # pattern (rapid cash-out, fan-out, structuring, ...)? See
+    # QUALIFYING_TYPOLOGY_CODES above.
+    typology_exposure = await get_typology_exposure(db, address, chain.value)
 
     # 1. Fetch transactions. Seeded-scenario addresses (app/services/scenarios/)
     #    are answered from the same local fixture the taint engine already uses
@@ -279,7 +338,11 @@ async def evaluate_wallet_risk(
         model_version = get_model_version()
         snapshot_id = hashlib.sha256(
             model_vector.tobytes()
-            + f"|{complaint_count}|{bool(sanction)}|{bool(mixer_exposure)}|{model_version}|{FEATURE_SCHEMA_VERSION}".encode()
+            + (
+                f"|{complaint_count}|{bool(sanction)}|{bool(mixer_exposure)}"
+                f"|{sorted(t['code'] for t in typology_exposure)}"
+                f"|{model_version}|{FEATURE_SCHEMA_VERSION}"
+            ).encode()
         ).hexdigest()[:16]
 
         # 4. Model inference. 4 decimal places, not 3 — a genuinely low-risk
@@ -294,7 +357,10 @@ async def evaluate_wallet_risk(
         #    so the panel always tops out at 5 factors total, never 5 ML
         #    factors plus extras bolted on past that.
         extra_evidence_slots = (
-            (1 if sanction else 0) + (1 if complaint_count > 0 else 0) + (1 if mixer_exposure else 0)
+            (1 if sanction else 0)
+            + (1 if complaint_count > 0 else 0)
+            + (1 if mixer_exposure else 0)
+            + (1 if typology_exposure else 0)
         )
         evidence = explain_wallet_risk(model_vector, top_k=max(1, 5 - extra_evidence_slots))
 
@@ -350,7 +416,40 @@ async def evaluate_wallet_risk(
                 *evidence,
             ]
 
-        corroborated = complaint_count >= 2 or bool(mixer_exposure)
+        # Laundering-pattern exposure: additive per distinct qualifying code,
+        # capped, plus a HIGH floor once two or more independent patterns
+        # stack together — one pattern alone is real signal but, like one
+        # complaint, not presumptively strong enough by itself.
+        if typology_exposure:
+            codes = {t["code"] for t in typology_exposure}
+            typo_bonus = round(min(TYPOLOGY_BONUS_MAX, TYPOLOGY_BONUS_PER_CODE * len(codes)), 4)
+            boosted_score = round(min(1.0, boosted_score + typo_bonus), 4)
+            if len(codes) >= TYPOLOGY_FLOOR_MIN_CODES:
+                boosted_score = round(max(boosted_score, TYPOLOGY_SCORE_FLOOR), 4)
+            seen: set[str] = set()
+            ordered_labels = []
+            for t in typology_exposure:
+                if t["label"] not in seen:
+                    seen.add(t["label"])
+                    ordered_labels.append(t["label"])
+            evidence = [
+                RiskEvidence(
+                    feature_name="laundering_pattern_exposure",
+                    contribution=typo_bonus,
+                    direction=EvidenceDirection.increases_risk,
+                    detail=(
+                        "This wallet's own traced flow exhibits: "
+                        f"{'; '.join(ordered_labels)}."
+                    ),
+                ),
+                *evidence,
+            ]
+
+        corroborated = (
+            complaint_count >= 2
+            or bool(mixer_exposure)
+            or (bool(typology_exposure) and len({t["code"] for t in typology_exposure}) >= TYPOLOGY_FLOOR_MIN_CODES)
+        )
 
         if sanction:
             # Blend, don't overwrite: a confirmed OFAC match is a floor on
@@ -427,6 +526,7 @@ async def evaluate_wallet_risk(
         shap_top5=shap_top5,
         complaint_count=complaint_count,
         mixer_exposure=mixer_exposure,
+        typology_codes=sorted({t["code"] for t in typology_exposure}),
         corroborated=corroborated,
         model_version=model_version,
         feature_schema_version=FEATURE_SCHEMA_VERSION,
@@ -437,7 +537,7 @@ async def evaluate_wallet_risk(
         "sanctions_blended"
         if sanction
         else "corroborated"
-        if complaint_count > 0 or mixer_exposure
+        if complaint_count > 0 or mixer_exposure or typology_exposure
         else "ml_model"
     )
 
@@ -463,6 +563,11 @@ async def evaluate_wallet_risk(
             reason = (
                 f"This wallet's own traced funds reach {mixer_exposure['entity_name']} — "
                 "known mixer exposure."
+            )
+        elif len({t["code"] for t in typology_exposure}) >= TYPOLOGY_FLOOR_MIN_CODES:
+            reason = (
+                "This wallet's own traced flow exhibits multiple laundering patterns "
+                f"({', '.join(sorted({t['code'] for t in typology_exposure}))})."
             )
         elif complaint_count == 1:
             reason = "1 complaint names this wallet; behavioral model score applied, awaiting further corroboration."

@@ -600,6 +600,90 @@ async def test_mixer_exposure_from_own_trace_raises_score(monkeypatch, db_sessio
 
 
 @pytest.mark.asyncio
+async def test_typology_exposure_from_own_trace_raises_score(monkeypatch, db_session):
+    """
+    Regression: three seeded demo wallets whose own persisted trace showed a
+    textbook rapid cash-out (funds reaching an exchange within minutes,
+    "consistent with a pre-arranged cash-out" per the typology engine's own
+    narrative) plus a fan-out to a dozen addresses still scored 5-8/100 LOW,
+    because the risk model never looked at Layer 2's own typology findings
+    for this exact wallet — only its raw transaction-shape features. Two or
+    more independent qualifying patterns on the wallet's own trace now floor
+    the score to HIGH, the same treatment already given to mixer exposure.
+    """
+    import uuid
+    from datetime import datetime, timezone
+
+    from app.models.engine import Anchor, Trace
+    from app.schemas.common import Chain
+    from app.services.risk_service import (
+        TYPOLOGY_SCORE_FLOOR,
+        evaluate_wallet_risk,
+    )
+
+    addr = "0xTypologyExposedWallet"
+    chain = "ETH"
+
+    anchor = Anchor(
+        id=uuid.uuid4(), case_id=None, address=addr, chain=chain,
+        attestation_class="C", attestation_type="scenario",
+        source_ref="test-typology-exposure", asserted_by="test",
+        asserted_at=datetime.now(timezone.utc), system_generated=False,
+    )
+    db_session.add(anchor)
+    await db_session.flush()
+
+    db_session.add(Trace(
+        id=uuid.uuid4(), anchor_id=anchor.id, reproducible_hash="b" * 64,
+        typologies=[
+            {
+                "code": "RAPID_TO_EXCHANGE", "label": "Rapid movement to exchange",
+                "narrative": "Funds reached Binance within 11 minutes of the reported "
+                "wallet receiving them — consistent with a pre-arranged cash-out.",
+                "addresses": [],
+            },
+            {
+                "code": "FAN_OUT", "label": "Fan-out distribution",
+                "narrative": "One wallet distributed funds to 12 separate addresses.",
+                "addresses": [],
+            },
+            {
+                "code": "MULTI_HOP", "label": "Multi-hop layering",
+                "narrative": "Funds passed through 5 hops.",
+                "addresses": [],
+            },
+        ],
+    ))
+    await db_session.commit()
+
+    ts = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    quiet_txs = [
+        RawTx(tx_hash="typTx1", from_address="0xSenderQuiet", to_address=addr,
+              amount=1.0, chain="ETH", timestamp=ts, asset="ETH"),
+    ]
+    import app.services.risk_service as risk_service_module
+
+    async def _fake_eth_get_transactions(address, limit=25):
+        return list(quiet_txs)
+
+    _patch_deterministic_pipeline(monkeypatch, txs=quiet_txs)
+    monkeypatch.setattr(risk_service_module.eth_explorer, "get_transactions", _fake_eth_get_transactions)
+
+    result = await evaluate_wallet_risk(db_session, addr, Chain.ETH)
+
+    assert result.risk_score >= TYPOLOGY_SCORE_FLOOR
+    feature_names = [e.feature_name for e in result.evidence]
+    assert "laundering_pattern_exposure" in feature_names
+    typo_evidence = next(e for e in result.evidence if e.feature_name == "laundering_pattern_exposure")
+    assert "Rapid movement to exchange" in typo_evidence.detail
+    assert "Fan-out distribution" in typo_evidence.detail
+    # MULTI_HOP is deliberately not a qualifying code — too common in
+    # legitimate use to be treated as laundering-pattern evidence.
+    assert "Multi-hop layering" not in typo_evidence.detail
+    assert result.risk_source == "corroborated"
+
+
+@pytest.mark.asyncio
 async def test_no_artificial_clamping_of_normal_scores(monkeypatch, db_session):
     """A genuine model probability strictly between 0 and 1 passes through
     untouched: no min/max clamp nudges it toward a round-looking number, and
